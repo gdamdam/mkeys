@@ -1,0 +1,278 @@
+/*
+ * panels.css — shared layout for the mkeys control-panel family (TransportBar,
+ * PatchPanel, Macros, PresetPicker, PerformancePanel, SessionBar).
+ *
+ * Chrome stays quiet: these rules only handle layout, spacing and grouping. The
+ * ember accent is delegated to the ui-kit components' own active/armed states;
+ * the few accents here (armed record dot, selected preset) follow the same
+ * "ember ONLY on active" rule from theme.css.
+ */
+
+/* --- generic groups ------------------------------------------------------- */
+.pgroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.pgroup + .pgroup {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-4);
+  border-top: var(--line-w) solid var(--line);
+}
+.pgroup__title {
+  color: var(--haze);
+}
+
+/* a responsive shelf of knobs/controls */
+.pshelf {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4) var(--sp-5);
+  align-items: flex-start;
+}
+.pfields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--sp-3) var(--sp-4);
+}
+
+/* a labelled subsection inside a group (e.g. "Osc 1") */
+.psub {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.psub__label {
+  color: var(--haze);
+}
+
+/* --- transport ------------------------------------------------------------ */
+.transport {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-4) var(--sp-5);
+}
+.transport__wordmark {
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.01em;
+  color: var(--bone);
+  margin: 0;
+}
+.transport__block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.transport__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+/* chromatic key strip: 12 compact toggles that wrap */
+.keystrip .segmented__row {
+  flex-wrap: wrap;
+}
+
+/* --- status pill (Link / MIDI readiness) ---------------------------------- */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 4px 10px;
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  color: var(--haze);
+  white-space: nowrap;
+}
+.pill--live {
+  border-color: var(--ember-dim);
+  color: var(--ember);
+}
+.pill__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.6;
+}
+.pill--live .pill__dot {
+  opacity: 1;
+  box-shadow: 0 0 0 3px var(--ember-wash);
+}
+.pill--searching .pill__dot {
+  animation: pill-pulse var(--dur-shimmer, 1.4s) var(--ease-in-out, ease-in-out) infinite;
+}
+@keyframes pill-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* --- plain text button (tap tempo, etc.) ---------------------------------- */
+.pbtn {
+  appearance: none;
+  border: var(--line-w) solid var(--line);
+  background: var(--slate);
+  color: var(--bone);
+  font-family: var(--font-ui);
+  font-size: var(--fs-ui);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  min-height: var(--touch);
+  cursor: pointer;
+  transition: border-color var(--t-fast, 0.12s) ease, background var(--t-fast, 0.12s) ease;
+}
+.pbtn:hover:not(:disabled) {
+  border-color: var(--slate-2);
+}
+.pbtn:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+.pbtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.pbtn--armed {
+  border-color: var(--ember-dim);
+  color: var(--ember);
+  background: var(--ember-wash);
+}
+
+.pinput {
+  appearance: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  border: var(--line-w) solid var(--line);
+  background: var(--ink);
+  color: var(--bone);
+  font-family: var(--font-ui);
+  font-size: var(--fs-ui);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  min-height: var(--touch);
+}
+.pinput:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* --- macro performance surface -------------------------------------------- */
+.macropad {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--sp-5);
+  align-items: start;
+  justify-items: center;
+}
+.macrocell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  text-align: center;
+}
+
+/* --- preset library ------------------------------------------------------- */
+.presetcat + .presetcat {
+  margin-top: var(--sp-4);
+}
+.presetcat__label {
+  color: var(--haze);
+  margin-bottom: var(--sp-2);
+}
+.presetgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--sp-2);
+}
+.presetchip {
+  appearance: none;
+  text-align: left;
+  border: var(--line-w) solid var(--line);
+  background: var(--slate);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  cursor: pointer;
+  color: var(--bone);
+  transition: border-color var(--t-fast, 0.12s) ease, background var(--t-fast, 0.12s) ease;
+}
+.presetchip:hover {
+  border-color: var(--slate-2);
+}
+.presetchip:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+.presetchip__name {
+  display: block;
+  font-family: var(--font-display);
+  font-size: var(--fs-body);
+  line-height: var(--lh-snug);
+}
+.presetchip[aria-pressed='true'] {
+  border-color: var(--ember-dim);
+  background: var(--ember-wash);
+}
+.presetchip[aria-pressed='true'] .presetchip__name {
+  color: var(--ember);
+}
+
+/* --- session library ------------------------------------------------------ */
+.sessionrow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 8px 0;
+  border-bottom: var(--line-w) solid var(--line);
+}
+.sessionrow__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-ui);
+  font-size: var(--fs-ui);
+  color: var(--bone);
+}
+.sessionrow__meta {
+  color: var(--haze);
+  font-size: var(--fs-xs);
+}
+.pempty {
+  color: var(--haze);
+  font-family: var(--font-ui);
+  font-size: var(--fs-ui);
+  padding: var(--sp-3) 0;
+}
+.ptoast {
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  color: var(--ember);
+}
+.ptoast--warn {
+  color: var(--danger);
+}
+.prec-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 20%, transparent);
+  animation: pill-pulse 1.2s ease-in-out infinite;
+}

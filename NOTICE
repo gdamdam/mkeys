@@ -1,0 +1,34 @@
+mkeys
+Copyright (C) 2026 Giovanni Damiola
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version. See the LICENSE file for the full text.
+
+--------------------------------------------------------------------------------
+Derived code and attribution
+--------------------------------------------------------------------------------
+
+mkeys is part of the *mpump* family of local-first browser instruments by the
+same author. All sibling projects are licensed AGPL-3.0-or-later, and the code
+reused here is reused under AGPL-3.0-or-later with attribution within the same
+author and suite. The following portions are derived from sibling projects:
+
+* Build tooling, the PWA service worker + precache strategy, and the
+  Vite / TypeScript / ESLint configuration patterns — derived from **mchord**.
+
+* The AudioWorklet synthesis patterns — the worklet processor structure, the
+  Vite worklet-URL build/loading approach (compiling a worklet source to a
+  hashed asset URL and registering it via `audioWorklet.addModule`), and the
+  AudioWorkletGlobalScope typing/ESLint conventions — derived from **mdrone**
+  (src/engine/*Processor, src/engine/AudioEngine.ts).
+
+* The scale/mode model, the tempo-synced scheduler/clock, the share-link codec,
+  and the defensive persistence (autosave + versioned session) patterns —
+  derived from **mchord** (src/harmony/scales.ts, src/transport/,
+  src/sharing/, src/persistence/).
+
+These derivations were confirmed by the suite lead. Because every source project
+is AGPL-3.0-or-later by the same author, the reuse is covered by that license;
+this NOTICE records the lineage for attribution and transparency.

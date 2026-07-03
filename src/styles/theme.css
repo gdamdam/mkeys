@@ -1,0 +1,159 @@
+/*
+ * mkeys theme tokens — the "spectral surface" identity.
+ *
+ * mkeys is a touch-first, scale-locked performance instrument. The playable
+ * surface is the hero; all chrome stays quiet and neutral so that the one bold
+ * idea — scale-degree-as-colour on the pads, plus a cool glide trail — reads as
+ * the memorable element. Deliberately NOT a default dark-slate + one-neon SaaS
+ * look. Every value here is consumed via var(--token). Self-hosted fonts only.
+ */
+:root {
+  color-scheme: dark;
+
+  /* ---- Type roles ------------------------------------------------------- *
+   * Fraunces (display serif): identity moments ONLY — wordmark, preset names,
+   * empty-state headlines. Space Grotesk: all UI labels/controls. Space Mono:
+   * every live numeric readout (note, cents, Hz, BPM, bars) — monospace makes
+   * values feel instrument-grade. Faces are @fontsource-imported in main.tsx. */
+  --font-display: 'Fraunces Variable', 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-ui: 'Space Grotesk Variable', 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Space Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* ---- Surfaces — cool graphite, graded by elevation ------------------- */
+  --ink: #0e1116; /* app background — the deepest */
+  --slate: #151b24; /* base panel */
+  --slate-2: #1b2430; /* raised panel */
+  --raise: #212c3a; /* controls / hover surfaces */
+  --line: #26313e; /* hairline borders */
+
+  /* ---- Text — cool bone, never pure white ------------------------------ */
+  --bone: #e7ecf2;
+  --haze: #8695a6; /* dimmed labels */
+  --haze-dim: #5a6675; /* faint / secondary numerics */
+
+  /* ---- Accents (used SPARINGLY) ---------------------------------------- *
+   * --ember: warm, ONLY active/selected/armed states. --glide: cool, RESERVED
+   * for the glide trail + live pitch readout. Chrome has NO other bright hue. */
+  --ember: #f2a65a;
+  --ember-dim: #8a6437;
+  --glide: #7fe7d4;
+  --glide-dim: #3f7d74;
+
+  /* Soft ember/glide washes for focus rings + glows, derived so callers don't
+   * hand-mix rgba each time. */
+  --ember-glow: color-mix(in srgb, var(--ember) 40%, transparent);
+  --ember-wash: color-mix(in srgb, var(--ember) 14%, transparent);
+  --glide-glow: color-mix(in srgb, var(--glide) 38%, transparent);
+
+  /* A single restrained danger for destructive/error affordances. Not an
+   * "accent" — reserved for genuine failure/removal states. */
+  --danger: #e2664a;
+
+  /* ---- Type scale (fluid where it aids identity) ---------------------- */
+  --fs-display: clamp(2.2rem, 1.4rem + 3.2vw, 3.2rem);
+  --fs-title: 1.35rem;
+  --fs-lg: 1.1rem;
+  --fs-body: 0.95rem;
+  --fs-ui: 0.85rem; /* default control label size */
+  --fs-sm: 0.78rem;
+  --fs-xs: 0.7rem;
+  --fs-eyebrow: 0.66rem; /* tiny letter-spaced section labels */
+
+  --lh-tight: 1.05;
+  --lh-snug: 1.25;
+  --lh-body: 1.5;
+
+  --ls-eyebrow: 0.09em; /* letter-spacing for eyebrow / all-caps micro labels */
+
+  /* ---- Spacing scale --------------------------------------------------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+
+  /* ---- Radii ----------------------------------------------------------- */
+  --radius: 14px;
+  --radius-sm: 9px;
+  --radius-xs: 6px;
+  --radius-pill: 999px;
+
+  /* ---- Geometry -------------------------------------------------------- */
+  --touch: 44px; /* minimum tap target */
+  --gap: 12px;
+  --line-w: 1px;
+
+  /* ---- Shadows / elevation -------------------------------------------- */
+  --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-3: 0 18px 50px rgba(0, 0, 0, 0.55);
+  --shadow-sheet: 0 -12px 40px rgba(0, 0, 0, 0.5);
+  --focus-ring: 0 0 0 2px var(--ink), 0 0 0 4px var(--ember);
+
+  /* ---- Motion — instrument-like easing, short by default -------------- */
+  --t-fast: 90ms;
+  --t-med: 170ms;
+  --t-slow: 320ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1); /* snappy settle */
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-bloom: cubic-bezier(0.16, 1, 0.3, 1); /* pad bloom on touch */
+  --dur-bloom: 260ms;
+  --dur-shimmer: 900ms; /* one-time power-on surface shimmer */
+}
+
+/* Motion is expressive here (pad bloom, glide trail, power-on shimmer). When
+ * the user asks for less, collapse it to instant static states rather than
+ * merely shortening — trails/bloom/shimmer must not run at all. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-fast: 0.01ms;
+    --t-med: 0.01ms;
+    --t-slow: 0.01ms;
+    --dur-bloom: 0.01ms;
+    --dur-shimmer: 0.01ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---- Light-touch base element styling --------------------------------- *
+ * Kept intentionally minimal; layout helpers live in global.css. */
+:where(h1, h2, h3, h4) {
+  margin: 0;
+  font-weight: 600;
+  line-height: var(--lh-snug);
+}
+
+:where(p) {
+  margin: 0;
+  line-height: var(--lh-body);
+}
+
+:where(a) {
+  color: var(--ember);
+  text-decoration: none;
+}
+
+:where(a:hover) {
+  text-decoration: underline;
+}
+
+:where(code, kbd, samp) {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+::selection {
+  background: var(--ember-wash);
+  color: var(--bone);
+}

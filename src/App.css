@@ -1,0 +1,200 @@
+/* App shell — performance-first layout for mkeys.
+   The playing surface is the hero and takes all the room it can; chrome stays
+   slim and collapses into a "focus" mode. Colours/type come from theme.css. */
+
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    'transport'
+    'stage'
+    'drawer';
+  block-size: 100dvh;
+  inline-size: 100%;
+  background: var(--ink);
+  color: var(--bone);
+  overflow: hidden;
+}
+
+.app__stage {
+  grid-area: stage;
+  min-block-size: 0;
+  display: flex;
+  padding: clamp(0.4rem, 1.5vmin, 1rem);
+}
+
+.app__surface {
+  flex: 1;
+  min-block-size: 0;
+}
+
+/* Drawer -------------------------------------------------------------------- */
+
+.app__drawer-toggle {
+  grid-area: drawer;
+  justify-self: center;
+  margin: 0.3rem auto;
+  padding: 0.35rem 0.9rem;
+  font: 600 0.72rem/1 var(--font-ui);
+  letter-spacing: 0.04em;
+  color: var(--haze);
+  background: var(--slate);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  order: 2;
+}
+.app__drawer-toggle:hover {
+  color: var(--bone);
+}
+
+.app__drawer {
+  grid-area: drawer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-block-size: min(46dvh, 30rem);
+  padding: 0 clamp(0.5rem, 2vw, 1.25rem) clamp(0.5rem, 2vw, 1.25rem);
+  overflow: hidden auto;
+  background: var(--slate);
+  border-top: 1px solid var(--line);
+}
+.app__drawer:not(.is-open) {
+  display: none;
+}
+
+/* Focus mode: hide chrome so the surface goes near-fullscreen. The toggle
+   floats so you can bring controls back. */
+.app--focus .app__drawer-toggle {
+  position: fixed;
+  inset-block-end: 0.6rem;
+  inset-inline-end: 0.6rem;
+  margin: 0;
+  z-index: 5;
+}
+
+.app__tabs {
+  position: sticky;
+  inset-block-start: 0;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.5rem 0;
+  background: var(--slate);
+  z-index: 1;
+}
+.app__tab {
+  padding: 0.4rem 0.85rem;
+  font: 600 0.78rem/1 var(--font-ui);
+  color: var(--haze);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.app__tab:hover {
+  color: var(--bone);
+}
+.app__tab.is-active {
+  color: var(--ember);
+  border-color: var(--line);
+  background: var(--slate-2, var(--ink));
+}
+
+.app__panels {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Power-on gesture screen --------------------------------------------------- */
+
+.poweron {
+  display: grid;
+  place-items: center;
+  block-size: 100dvh;
+  padding: 1.5rem;
+  background:
+    radial-gradient(140% 100% at 50% 0%, var(--slate) 0%, var(--ink) 60%);
+  color: var(--bone);
+}
+.poweron__inner {
+  max-inline-size: 34rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.1rem;
+}
+.poweron__wordmark {
+  margin: 0;
+  font: 400 clamp(3rem, 12vw, 5.5rem)/0.95 var(--font-display);
+  letter-spacing: -0.02em;
+}
+.poweron__wordmark em {
+  color: var(--ember);
+  font-style: italic;
+}
+.poweron__hook {
+  margin: 0;
+  max-inline-size: 22rem;
+  font: 400 clamp(1rem, 3.5vw, 1.35rem)/1.4 var(--font-display);
+  color: var(--haze);
+}
+.poweron__start {
+  margin-block-start: 0.5rem;
+  padding: 0.85rem 2rem;
+  font: 600 1rem/1 var(--font-ui);
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  background: var(--ember);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform var(--dur, 0.15s) var(--ease, ease);
+}
+.poweron__start:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.02);
+}
+.poweron__start:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.poweron__error {
+  margin: 0;
+  font: 500 0.85rem/1.4 var(--font-ui);
+  color: var(--ember);
+}
+.poweron__note {
+  margin: 0;
+  font: 400 0.78rem/1.5 var(--font-mono);
+  color: var(--haze-dim);
+}
+
+/* Desktop: dock the drawer to the right so the surface stays wide. */
+@media (min-width: 900px) {
+  .app {
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      'transport transport'
+      'stage drawer';
+  }
+  .app__drawer {
+    inline-size: min(24rem, 32vw);
+    max-block-size: none;
+    border-top: none;
+    border-inline-start: 1px solid var(--line);
+  }
+  .app--focus .app__drawer {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .poweron__start {
+    transition: none;
+  }
+  .poweron__start:hover:not(:disabled) {
+    transform: none;
+  }
+}
