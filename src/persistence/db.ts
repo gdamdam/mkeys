@@ -40,6 +40,20 @@ function requestToPromise<T>(req: IDBRequest<T>): Promise<T | null> {
 }
 
 /**
+ * Resolve true when a write transaction actually commits, false if it aborts or
+ * errors. A request's `onsuccess` fires *before* commit, so quota-exceeded (and
+ * similar) failures abort the transaction after that point — waiting on the
+ * transaction is the only way to report a write truthfully.
+ */
+function txToPromise(tx: IDBTransaction): Promise<boolean> {
+  return new Promise((resolve) => {
+    tx.oncomplete = () => resolve(true)
+    tx.onabort = () => resolve(false)
+    tx.onerror = () => resolve(false)
+  })
+}
+
+/**
  * Open (and if needed create/upgrade) the database. Resolves null if
  * IndexedDB is unavailable or the open fails for any reason.
  */
@@ -105,18 +119,18 @@ export async function get(id: string): Promise<Session | null> {
 export async function put(id: string, session: Session): Promise<boolean> {
   const record: StoredSession = { id, session: sanitizeSession(session) }
   const result = await withStore('readwrite', async (store) => {
-    const res = await requestToPromise(store.put(record))
-    // put resolves the key on success; null signals an error.
-    return res === null ? null : true
+    store.put(record)
+    // Report success only once the transaction commits (see txToPromise).
+    return txToPromise(store.transaction)
   })
   return result === true
 }
 
-/** Delete a stored session by id. Resolves true if the op completed. */
+/** Delete a stored session by id. Resolves true once the txn commits. */
 export async function del(id: string): Promise<boolean> {
   const result = await withStore('readwrite', async (store) => {
-    await requestToPromise(store.delete(id))
-    return true
+    store.delete(id)
+    return txToPromise(store.transaction)
   })
   return result === true
 }

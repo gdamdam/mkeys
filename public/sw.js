@@ -1,9 +1,15 @@
-// Bump these whenever the caching strategy changes; activate() purges older caches.
-const SHELL_CACHE = 'mkeys-shell-v1'
+// Per-build fingerprint, stamped in at build time by the mkeys-precache-manifest
+// vite plugin (replaces the placeholder). It changes whenever any hashed asset
+// changes, so sw.js is no longer byte-identical between deploys — that byte
+// difference is what makes the browser re-install the SW and re-run precache().
+// In dev (unbuilt), it stays the literal placeholder, which is fine.
+const BUILD_HASH = '__BUILD_HASH__'
+// Cache names carry the build hash so activate() purges every prior deploy's
+// shell/runtime caches instead of leaving stale hashed assets behind forever.
+const SHELL_CACHE = `mkeys-shell-${BUILD_HASH}`
 // Runtime cache is size-capped: hashed bundles from past deploys would otherwise
-// accumulate here forever (sw.js never changes between deploys, so the cache name
-// alone can't evict them). Trimming to a fixed budget bounds disk usage.
-const RUNTIME_CACHE = 'mkeys-runtime-v1'
+// accumulate here forever. Trimming to a fixed budget bounds disk usage.
+const RUNTIME_CACHE = `mkeys-runtime-${BUILD_HASH}`
 const RUNTIME_MAX_ENTRIES = 64
 const APP_BASE = new URL('./', self.location.href).pathname
 const SHELL_URLS = [APP_BASE, `${APP_BASE}manifest.webmanifest`, `${APP_BASE}mkeys-mark.svg`]

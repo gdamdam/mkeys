@@ -54,6 +54,9 @@ export function Select<T extends string>({
   const buttonRef = useRef<HTMLButtonElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
   const typeahead = useRef({ query: '', at: 0 })
+  // Where the current pointer went down on an option, to tell a tap from a
+  // touch-scroll: only a near-stationary release commits (see M10).
+  const optionDown = useRef<{ x: number; y: number } | null>(null)
 
   const selectedIndex = options.findIndex((o) => o.value === value)
   const selected = selectedIndex >= 0 ? options[selectedIndex] : undefined
@@ -212,10 +215,24 @@ export function Select<T extends string>({
         aria-selected={isSelected}
         aria-disabled={opt.disabled || undefined}
         className={oCls}
-        // Use pointerdown so the option commits before the outside-click handler.
+        // Record the down position but DON'T commit or preventDefault here, so a
+        // swipe can scroll a long list. Commit happens on a stationary release.
         onPointerDown={(e) => {
-          e.preventDefault()
-          commit(i)
+          optionDown.current = { x: e.clientX, y: e.clientY }
+        }}
+        onPointerUp={(e) => {
+          const start = optionDown.current
+          optionDown.current = null
+          if (!start) return
+          const moved = Math.hypot(e.clientX - start.x, e.clientY - start.y)
+          // A drag (scroll) moves the finger; only a tap commits.
+          if (moved <= 10) {
+            e.preventDefault()
+            commit(i)
+          }
+        }}
+        onPointerCancel={() => {
+          optionDown.current = null
         }}
         onPointerEnter={() => !opt.disabled && setActive(i)}
       >

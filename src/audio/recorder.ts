@@ -25,6 +25,20 @@ type RecorderOutMsg = ChunkMsg | DoneMsg
 const DONE_ACK_TIMEOUT_MS = 2000
 
 /**
+ * State for one in-progress take. Buffers live here (not on the recorder) so a
+ * take that stop() is still encoding can't be cleared or truncated by a new
+ * start() that races into its 2 s done-ack window.
+ */
+interface Capture {
+  node: AudioWorkletNode
+  chunksL: Float32Array[]
+  chunksR: Float32Array[]
+  totalFrames: number
+  /** Resolves when the worklet acks its final flush. */
+  done: Promise<void>
+}
+
+/**
  * Encode stereo Float32 channels as a 16-bit little-endian PCM WAV.
  * Returns a complete RIFF buffer ready to wrap in a Blob.
  */
@@ -77,12 +91,10 @@ export function encodeWav16(
 export class MasterRecorder {
   private readonly ctx: AudioContext
   private readonly tapNode: AudioNode
-  private node: AudioWorkletNode | null = null
-  private chunksL: Float32Array[] = []
-  private chunksR: Float32Array[] = []
-  private totalFrames = 0
+  /** The active take, or null when idle. */
+  private active: Capture | null = null
+  /** Claimed synchronously in start() so a concurrent start() bails. */
   private capturing = false
-  private donePromise: Promise<void> | null = null
 
   /**
    * @param ctx     the running AudioContext
@@ -101,45 +113,52 @@ export class MasterRecorder {
   /** Begin capturing. The `mkeys-recorder-tap` module must already be added. */
   async start(): Promise<void> {
     if (this.capturing) return
-    if (this.ctx.state === 'suspended') await this.ctx.resume()
-
-    let node: AudioWorkletNode
-    try {
-      node = new AudioWorkletNode(this.ctx, 'mkeys-recorder-tap', {
-        numberOfInputs: 1,
-        numberOfOutputs: 0,
-      })
-    } catch {
-      throw new Error('Recorder worklet not ready. Wait a moment and try again.')
-    }
-
-    this.chunksL = []
-    this.chunksR = []
-    this.totalFrames = 0
-
-    let resolveDone!: () => void
-    this.donePromise = new Promise<void>((r) => {
-      resolveDone = r
-    })
-
-    node.port.onmessage = (e: MessageEvent<RecorderOutMsg>) => {
-      const msg = e.data
-      if (!msg) return
-      if (msg.type === 'chunk') {
-        const [l, r] = msg.samples
-        this.chunksL.push(l)
-        this.chunksR.push(r)
-        this.totalFrames += l.length
-      } else if (msg.type === 'done') {
-        resolveDone()
-      }
-    }
-
-    // Parallel tap — leaves the path to destination untouched.
-    this.tapNode.connect(node)
-    node.port.postMessage({ type: 'start' })
-    this.node = node
+    // Claim synchronously, before any await, so a double-tapped start can't
+    // build a second tap node into the same buffers.
     this.capturing = true
+    try {
+      if (this.ctx.state === 'suspended') await this.ctx.resume()
+
+      let node: AudioWorkletNode
+      try {
+        node = new AudioWorkletNode(this.ctx, 'mkeys-recorder-tap', {
+          numberOfInputs: 1,
+          numberOfOutputs: 0,
+        })
+      } catch {
+        throw new Error('Recorder worklet not ready. Wait a moment and try again.')
+      }
+
+      let resolveDone!: () => void
+      const done = new Promise<void>((r) => {
+        resolveDone = r
+      })
+      // Buffers are owned by this capture object; the closure below appends into
+      // it directly, so a later take never touches a take being encoded.
+      const capture: Capture = { node, chunksL: [], chunksR: [], totalFrames: 0, done }
+
+      node.port.onmessage = (e: MessageEvent<RecorderOutMsg>) => {
+        const msg = e.data
+        if (!msg) return
+        if (msg.type === 'chunk') {
+          const [l, r] = msg.samples
+          capture.chunksL.push(l)
+          capture.chunksR.push(r)
+          capture.totalFrames += l.length
+        } else if (msg.type === 'done') {
+          resolveDone()
+        }
+      }
+
+      // Parallel tap — leaves the path to destination untouched.
+      this.tapNode.connect(node)
+      node.port.postMessage({ type: 'start' })
+      this.active = capture
+    } catch (err) {
+      // Setup failed — release the claim so the user can retry.
+      this.capturing = false
+      throw err
+    }
   }
 
   /**
@@ -147,29 +166,29 @@ export class MasterRecorder {
    * an empty stereo WAV if nothing was captured.
    */
   async stop(): Promise<Blob> {
-    const node = this.node
-    if (!node || !this.capturing) {
+    const capture = this.active
+    if (!capture || !this.capturing) {
       return new Blob([encodeWav16(new Float32Array(0), new Float32Array(0), this.ctx.sampleRate)], {
         type: 'audio/wav',
       })
     }
+    // Detach the take now: a start() that races the done-ack window below gets a
+    // fresh capture and can't disturb the one we're about to encode.
     this.capturing = false
+    this.active = null
 
-    node.port.postMessage({ type: 'stop' })
-    await this.awaitDoneAck()
+    capture.node.port.postMessage({ type: 'stop' })
+    await this.awaitDoneAck(capture.done)
 
     try {
-      this.tapNode.disconnect(node)
+      this.tapNode.disconnect(capture.node)
     } catch {
       // Already disconnected.
     }
-    node.port.onmessage = null
-    this.node = null
+    capture.node.port.onmessage = null
 
-    const left = concat(this.chunksL, this.totalFrames)
-    const right = concat(this.chunksR, this.totalFrames)
-    this.chunksL = []
-    this.chunksR = []
+    const left = concat(capture.chunksL, capture.totalFrames)
+    const right = concat(capture.chunksR, capture.totalFrames)
 
     const wav = encodeWav16(left, right, this.ctx.sampleRate)
     return new Blob([wav], { type: 'audio/wav' })
@@ -177,7 +196,7 @@ export class MasterRecorder {
 
   /** Best-effort teardown for engine disposal. Idempotent. */
   dispose(): void {
-    const node = this.node
+    const node = this.active?.node
     if (node) {
       try {
         node.port.postMessage({ type: 'stop' })
@@ -191,18 +210,12 @@ export class MasterRecorder {
         // ignore
       }
     }
-    this.node = null
+    this.active = null
     this.capturing = false
-    this.donePromise = null
-    this.chunksL = []
-    this.chunksR = []
-    this.totalFrames = 0
   }
 
   /** Await the worklet's "done", but never longer than the timeout. */
-  private async awaitDoneAck(): Promise<void> {
-    const done = this.donePromise
-    if (!done) return
+  private async awaitDoneAck(done: Promise<void>): Promise<void> {
     await Promise.race([
       done,
       new Promise<void>((resolve) => {

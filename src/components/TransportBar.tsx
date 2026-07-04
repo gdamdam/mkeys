@@ -65,6 +65,28 @@ export function TransportBar() {
     <div className="transport">
       <h1 className="transport__wordmark">mkeys</h1>
 
+      {/* master output level + pre-FX input gain */}
+      <div className="transport__block levels">
+        <Slider
+          label="Master"
+          min={0}
+          max={1}
+          step={0.01}
+          value={session.masterVolume}
+          format={(v) => `${Math.round(v * 100)}%`}
+          onChange={(v) => inst.setMasterVolume(v)}
+        />
+        <Slider
+          label="Gain"
+          min={0}
+          max={2}
+          step={0.01}
+          value={session.inputGain}
+          format={(v) => `${v.toFixed(2)}×`}
+          onChange={(v) => inst.setInputGain(v)}
+        />
+      </div>
+
       {/* key + scale */}
       <div className="transport__block keystrip">
         <Segmented

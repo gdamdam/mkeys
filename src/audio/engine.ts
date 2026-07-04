@@ -59,16 +59,22 @@ function defaultFx(): FxParams {
 export class AudioEngine {
   private ctx: AudioContext | null = null
   private node: AudioWorkletNode | null = null
+  private inputGainNode: GainNode | null = null
   private fx: FxChain | null = null
   private master: GainNode | null = null
   private recorder: MasterRecorder | null = null
   private running = false
+  /** In-flight start, shared by concurrent callers so only one graph is built. */
+  private startPromise: Promise<void> | null = null
 
   // Authoritative main-thread mirror of patch/fx, so macro merges and setParam
   // layer onto a known-complete base.
   private patch: PatchParams = defaultPatch()
   private fxState: FxParams = defaultFx()
   private bpm = 120
+  // Mirrored so a (re)start applies the current levels to the fresh graph.
+  private masterVolumeState = 1
+  private inputGainState = 1
 
   /** True once {@link start} has completed and the graph is live. */
   isRunning(): boolean {
@@ -86,29 +92,50 @@ export class AudioEngine {
    */
   async start(): Promise<void> {
     if (this.running) return
-    const ctx = new AudioContext()
-    await ctx.resume()
+    // Coalesce concurrent starts (e.g. a double-tapped gesture): both callers
+    // await one build instead of racing two AudioContexts into existence.
+    if (this.startPromise) return this.startPromise
+    this.startPromise = this.build()
+    try {
+      await this.startPromise
+    } finally {
+      this.startPromise = null
+    }
+  }
 
-    // Register both worklet modules before instantiating any node from them.
-    await ctx.audioWorklet.addModule(synthWorkletUrl)
-    await ctx.audioWorklet.addModule(recorderWorkletUrl)
+  private async build(): Promise<void> {
+    const ctx = new AudioContext()
+    try {
+      await ctx.resume()
+      // Register both worklet modules before instantiating any node from them.
+      await ctx.audioWorklet.addModule(synthWorkletUrl)
+      await ctx.audioWorklet.addModule(recorderWorkletUrl)
+    } catch (err) {
+      // Setup failed — close the freshly created context so it isn't leaked.
+      void ctx.close()
+      throw err
+    }
 
     const node = new AudioWorkletNode(ctx, 'mkeys-synth', {
       numberOfInputs: 0,
       numberOfOutputs: 1,
       outputChannelCount: [2],
     })
+    const inputGain = ctx.createGain()
+    inputGain.gain.value = this.inputGainState
     const fx = new FxChain(ctx)
     const master = ctx.createGain()
-    master.gain.value = 1
+    master.gain.value = this.masterVolumeState
 
-    // synth → FX → master → destination.
-    node.connect(fx.input)
+    // synth → input gain → FX → master → destination.
+    node.connect(inputGain)
+    inputGain.connect(fx.input)
     fx.output.connect(master)
     master.connect(ctx.destination)
 
     this.ctx = ctx
     this.node = node
+    this.inputGainNode = inputGain
     this.fx = fx
     this.master = master
     this.recorder = new MasterRecorder(ctx, master)
@@ -155,6 +182,20 @@ export class AudioEngine {
     this.fx?.setParams(fx)
   }
 
+  /** Master output level (0..1). Smoothed so it never zippers. */
+  setMasterVolume(v: number): void {
+    this.masterVolumeState = v
+    const g = this.master?.gain
+    if (g) g.setTargetAtTime(v, this.ctx?.currentTime ?? 0, 0.02)
+  }
+
+  /** Pre-FX input gain (unity 1). Smoothed so it never zippers. */
+  setInputGain(v: number): void {
+    this.inputGainState = v
+    const g = this.inputGainNode?.gain
+    if (g) g.setTargetAtTime(v, this.ctx?.currentTime ?? 0, 0.02)
+  }
+
   /**
    * Apply the four performance macros: derive patch/fx overrides, shallow-merge
    * them onto the current mirrored state, and push the merged result.
@@ -196,11 +237,13 @@ export class AudioEngine {
       this.node.port.onmessage = null
       this.node.disconnect()
     }
+    this.inputGainNode?.disconnect()
     this.fx?.dispose()
     this.master?.disconnect()
     void this.ctx?.close()
     this.ctx = null
     this.node = null
+    this.inputGainNode = null
     this.fx = null
     this.master = null
     this.recorder = null

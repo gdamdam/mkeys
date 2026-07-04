@@ -132,6 +132,8 @@ interface CompactSession {
   mi: CompactMidi
   ph: CompactPhrase | null
   pn?: string // presetName (optional)
+  mv?: number // masterVolume (optional; absent in older payloads)
+  ig?: number // inputGain (optional; absent in older payloads)
 }
 
 // ---------------------------------------------------------------------------
@@ -173,6 +175,8 @@ export function createDefaultSession(): Session {
       reverb: { size: 0.5, mix: 0.2 },
       limiterThreshold: -3,
     },
+    masterVolume: 1,
+    inputGain: 1,
     macros: { glow: 0.3, motion: 0.3, air: 0.3, grit: 0.3 },
     arp: { enabled: false, mode: 'up', division: 8, gate: 0.8, swing: 0, octaves: 1 },
     chordMode: 'off',
@@ -344,12 +348,14 @@ function sanitizeFx(raw: unknown, fb: FxParams): FxParams {
 function sanitizeSurface(raw: unknown, fb: SurfaceConfig): SurfaceConfig {
   const r = isRecord(raw) ? raw : {}
   return {
+    // Bounds mirror persistence/session.ts so a session survives a
+    // share/reload round-trip unchanged (see the divergence note in L4).
     layout: coerceEnum(r.layout, LAYOUTS, fb.layout),
-    rows: int(r.rows, 1, 64, fb.rows),
-    cols: int(r.cols, 1, 64, fb.cols),
-    rowOffsetDegrees: int(r.rowOffsetDegrees, -24, 24, fb.rowOffsetDegrees),
+    rows: int(r.rows, 1, 32, fb.rows),
+    cols: int(r.cols, 1, 32, fb.cols),
+    rowOffsetDegrees: int(r.rowOffsetDegrees, 0, 12, fb.rowOffsetDegrees),
     quantize: num(r.quantize, 0, 1, fb.quantize),
-    baseOctave: int(r.baseOctave, 0, 9, fb.baseOctave),
+    baseOctave: int(r.baseOctave, -1, 9, fb.baseOctave),
   }
 }
 
@@ -397,10 +403,11 @@ function sanitizeExpression(raw: unknown): TouchExpression | undefined {
 function sanitizeEvent(raw: unknown): PhraseEvent | null {
   if (!isRecord(raw)) return null
   const event: PhraseEvent = {
-    time: num(raw.time, 0, 1e6, 0),
+    // Bounds mirror persistence/session.ts (see L4) so events round-trip intact.
+    time: num(raw.time, 0, Number.MAX_SAFE_INTEGER, 0),
     type: coerceEnum(raw.type, EVENT_TYPES, 'on'),
-    degree: int(raw.degree, -1000, 1000, 0),
-    octave: int(raw.octave, -2, 12, 0),
+    degree: int(raw.degree, -128, 128, 0),
+    octave: int(raw.octave, -2, 10, 4),
   }
   const expr = sanitizeExpression(raw.expression)
   if (expr) event.expression = expr
@@ -414,7 +421,7 @@ function sanitizePhrase(raw: unknown): Phrase | null {
     : []
   return {
     events,
-    lengthBeats: num(raw.lengthBeats, 0, 1e6, 0),
+    lengthBeats: num(raw.lengthBeats, 0, Number.MAX_SAFE_INTEGER, 4),
   }
 }
 
@@ -434,6 +441,8 @@ export function sanitizeSession(raw: unknown): Session {
     surface: sanitizeSurface(r.surface, fb.surface),
     patch: sanitizePatch(r.patch, fb.patch),
     fx: sanitizeFx(r.fx, fb.fx),
+    masterVolume: num(r.masterVolume, 0, 1, fb.masterVolume),
+    inputGain: num(r.inputGain, 0, 2, fb.inputGain),
     macros: sanitizeMacros(r.macros, fb.macros),
     arp: sanitizeArp(r.arp, fb.arp),
     chordMode: coerceEnum<ChordMode>(r.chordMode, CHORD_MODES, fb.chordMode),
@@ -525,6 +534,8 @@ function toCompact(s: Session): CompactSession {
     cm: CHORD_MODES.indexOf(s.chordMode),
     mi: [s.midi.inEnabled ? 1 : 0, s.midi.outEnabled ? 1 : 0, s.midi.outChannel],
     ph: encodePhrase(s.phrase),
+    mv: s.masterVolume,
+    ig: s.inputGain,
   }
   if (s.presetName !== undefined) compact.pn = s.presetName
   return compact
@@ -653,21 +664,44 @@ function fromCompact(raw: unknown): Record<string, unknown> {
     chordMode: fromIdx(CHORD_MODES, raw.cm),
     midi: { inEnabled: mi[0] === 1, outEnabled: mi[1] === 1, outChannel: nn(mi[2]) },
     phrase: raw.ph === null || raw.ph === undefined ? null : decodePhrase(raw.ph),
+    // Pass through untouched: absent in older payloads, where sanitizeSession
+    // supplies the default (1) rather than nn()'s 0 (which would be silence).
+    masterVolume: raw.mv,
+    inputGain: raw.ig,
   }
   if (typeof raw.pn === 'string') loose.presetName = raw.pn
   return loose
 }
 
 // ---------------------------------------------------------------------------
-// Base64 over Unicode-safe JSON
+// Base64url over Unicode-safe JSON
 // ---------------------------------------------------------------------------
 
 function utf8ToBase64(s: string): string {
+  // base64url: URL-safe alphabet (`-_`) with no padding, so the string survives
+  // a URL fragment intact — no `+ / =` for intermediaries to percent-encode or
+  // mangle (QR tools, redirectors, chat linkifiers).
   return btoa(unescape(encodeURIComponent(s)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
 }
 
 function base64ToUtf8(b64: string): string {
-  return decodeURIComponent(escape(atob(b64)))
+  // Percent-decode first (an intermediary may have encoded the fragment), then
+  // accept both alphabets — base64url (`-_`) and legacy base64 (`+/`) — and
+  // recover `+` that was mangled into a space (atob would otherwise strip it).
+  let s = b64
+  try {
+    s = decodeURIComponent(b64)
+  } catch {
+    // Not percent-encoded (or malformed) — decode the raw string as-is.
+  }
+  s = s.replace(/-/g, '+').replace(/_/g, '/').replace(/ /g, '+')
+  const pad = s.length % 4
+  if (pad === 2) s += '=='
+  else if (pad === 3) s += '='
+  return decodeURIComponent(escape(atob(s)))
 }
 
 // ---------------------------------------------------------------------------

@@ -29,6 +29,8 @@ const MAX_UNISON = 8
 /** Frames in one render quantum. */
 const BLOCK = 128
 const TWO_PI = Math.PI * 2
+/** Beats per bar; a `division` of N means "1/N note" = BEATS_PER_BAR/N beats. */
+const BEATS_PER_BAR = 4
 
 /** A sensible, always-valid default patch used until the host sends one. */
 function defaultPatch(): PatchParams {
@@ -71,6 +73,9 @@ function polyBlep(t: number, dt: number): number {
   }
   return 0
 }
+
+/** Monotonic counter stamped onto each voice at start, for oldest-first steal. */
+let voiceStartCounter = 0
 
 type EnvStage = 'idle' | 'attack' | 'decay' | 'sustain' | 'release'
 
@@ -156,6 +161,8 @@ class Envelope {
 class Voice {
   id = -1
   active = false
+  /** Start-order stamp; lowest among active voices is the oldest. */
+  startSeq = 0
   private midi = 60
   private velocity = 1
   private currentFreq = 440
@@ -180,6 +187,7 @@ class Voice {
   start(id: number, midi: number, velocity: number, patch: PatchParams): void {
     this.id = id
     this.active = true
+    this.startSeq = ++voiceStartCounter
     this.midi = midi
     this.velocity = clamp(velocity, 0, 1)
     this.targetFreq = midiToFreq(midi)
@@ -197,6 +205,12 @@ class Voice {
     }
     this.timbre = 0
     this.pressure = this.velocity
+    // Zero the SVF integrators: prevents stale-state clicks on voice reuse and
+    // contains any NaN (from a past divergence) to a single note.
+    this.lpL = 0
+    this.bpL = 0
+    this.lpR = 0
+    this.bpR = 0
     this.ampEnv.set(
       patch.ampEnv.attack,
       patch.ampEnv.decay,
@@ -340,7 +354,9 @@ class Voice {
     const timbreMul = Math.pow(2, this.timbre * 2)
     const lfoMul = Math.pow(2, lfoFilter * 4)
     let cutoff = f.cutoff * keyMul * envMul * timbreMul * lfoMul
-    cutoff = clamp(cutoff, 20, sampleRate * 0.45)
+    // Chamberlin SVF is only stable while fc < fs/4; stay comfortably below it
+    // so envelope/timbre/LFO peaks can't push the coefficient into divergence.
+    cutoff = clamp(cutoff, 20, sampleRate * 0.22)
 
     // Chamberlin SVF coefficients (stable while fc < fs/4).
     const fc = 2 * Math.sin((Math.PI * cutoff) / sampleRate)
@@ -463,10 +479,14 @@ class SynthProcessor extends AudioWorkletProcessor {
   }
 
   private noteOn(id: number, midi: number, velocity: number): void {
-    // Reuse a voice already holding this id, else a free one, else steal.
+    // Reuse a voice already holding this id, else a free one, else steal the
+    // oldest (lowest startSeq) so a held note isn't retriggered repeatedly.
     let voice = this.voices.find((v) => v.active && v.id === id)
     if (!voice) voice = this.voices.find((v) => !v.active)
-    if (!voice) voice = this.voices[0]
+    if (!voice) {
+      voice = this.voices[0]
+      for (const v of this.voices) if (v.startSeq < voice.startSeq) voice = v
+    }
     voice.start(id, midi, velocity, this.patch)
   }
 
@@ -474,8 +494,10 @@ class SynthProcessor extends AudioWorkletProcessor {
   private lfoFrequency(): number {
     const lfo = this.patch.lfo
     if (lfo.tempoSync) {
+      // `division: N` means a 1/N-note cycle, i.e. BEATS_PER_BAR/N beats per
+      // cycle → (bpm/60) * (N / BEATS_PER_BAR) Hz. 1/8 at 120 BPM = 4 Hz.
       const div = Math.max(1, lfo.division ?? 4)
-      return (this.bpm / 60) / div
+      return (this.bpm / 60) * (div / BEATS_PER_BAR)
     }
     return Math.max(0, lfo.rate)
   }

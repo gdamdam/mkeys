@@ -228,6 +228,10 @@ export interface Session {
   surface: SurfaceConfig
   patch: PatchParams
   fx: FxParams
+  /** Master output level 0..1, applied to the engine's master gain node. */
+  masterVolume: number
+  /** Pre-FX input gain 0..2 (unity 1), applied between the synth and FX chain. */
+  inputGain: number
   macros: Macros
   arp: ArpConfig
   chordMode: ChordMode

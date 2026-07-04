@@ -43,7 +43,7 @@ import type {
   SavedSessionMeta,
 } from '../components/instrument'
 import { AudioEngine, getPreset } from '../audio'
-import { SCALE_TABLE, degreeToMidi, midiToNearestDegree } from '../harmony/scales'
+import { REFERENCE_OCTAVE, SCALE_TABLE, degreeToMidi, midiToNearestDegree } from '../harmony/scales'
 import { buildGrid } from '../surface/geometry'
 import { Scheduler, type PatternEvent, type PlannedEvent } from '../transport/scheduler'
 import { secondsPerBeat } from '../transport/clock'
@@ -251,6 +251,8 @@ class InstrumentStore {
       tapTempo: this.tapTempo,
       updatePatch: this.updatePatch,
       setMacro: this.setMacro,
+      setMasterVolume: this.setMasterVolume,
+      setInputGain: this.setInputGain,
       loadPreset: this.loadPreset,
       setArp: this.setArp,
       setChordMode: this.setChordMode,
@@ -299,6 +301,8 @@ class InstrumentStore {
       this.engine.setPatch(this.session.patch)
       this.engine.setFx(this.session.fx)
       this.engine.setMacros(this.session.macros)
+      this.engine.setMasterVolume(this.session.masterVolume)
+      this.engine.setInputGain(this.session.inputGain)
       this.applyTempo()
 
       // start() is idempotent — drop any prior subscription before re-subscribing.
@@ -316,6 +320,11 @@ class InstrumentStore {
       this.startedFlag = true
       this.emit()
     })()
+    // Clear a rejected start so a later tap can retry (some browsers need a
+    // second gesture); without this the cached rejection is returned forever.
+    this.startPromise.catch(() => {
+      this.startPromise = null
+    })
     return this.startPromise
   }
 
@@ -431,6 +440,22 @@ class InstrumentStore {
     const macros: Macros = { ...this.session.macros, [name]: clamp01(value) }
     this.session = { ...this.session, macros }
     this.engine.setMacros(macros)
+    this.autosave()
+    this.emit()
+  }
+
+  setMasterVolume = (v: number): void => {
+    const masterVolume = clamp01(v)
+    this.session = { ...this.session, masterVolume }
+    this.engine.setMasterVolume(masterVolume)
+    this.autosave()
+    this.emit()
+  }
+
+  setInputGain = (v: number): void => {
+    const inputGain = v < 0 ? 0 : v > 2 ? 2 : v
+    this.session = { ...this.session, inputGain }
+    this.engine.setInputGain(inputGain)
     this.autosave()
     this.emit()
   }
@@ -708,6 +733,13 @@ class InstrumentStore {
       this.emit()
       return
     }
+    // If a phrase is playing, stop it first — otherwise the old loop keeps
+    // sounding, bleeds into the take, and can no longer be stopped by Play/Stop.
+    if (this.recorderState === 'playing') {
+      this.phraseScheduler.stop()
+      for (const id of [...this.phraseVoiceIds]) this.releaseVoice(id)
+      this.phraseVoiceIds.clear()
+    }
     void this.ensureStarted()
     this.recordedEvents = []
     this.recordStartCtx = this.ctxNow()
@@ -825,6 +857,8 @@ class InstrumentStore {
   saveSession = async (name: string): Promise<void> => {
     const session: Session = { ...this.session, name }
     await db.put(uuid(), session)
+    // The user has committed this session; autosave may resume for it.
+    this.loadedFromUrl = false
     await this.refreshSavedSessions()
   }
 
@@ -840,6 +874,8 @@ class InstrumentStore {
 
   applySession = (session: Session): void => {
     const s = sanitizeSession(session)
+    // Loading a stored session replaces any URL-seeded one; autosave resumes.
+    this.loadedFromUrl = false
     this.releaseAll()
     if (this.recorderState !== 'idle') {
       this.phraseScheduler.stop()
@@ -851,6 +887,8 @@ class InstrumentStore {
       this.engine.setPatch(s.patch)
       this.engine.setFx(s.fx)
       this.engine.setMacros(s.macros)
+      this.engine.setMasterVolume(s.masterVolume)
+      this.engine.setInputGain(s.inputGain)
       this.applyTempo()
     }
     if (s.arp.enabled) this.rebuildArp()
@@ -971,7 +1009,10 @@ class InstrumentStore {
     const len = SCALE_TABLE[this.session.mode].length
     const degree = midiToNearestDegree(note, this.session.keyRoot, this.session.mode)
     const index = ((degree % len) + len) % len
-    const octave = this.session.surface.baseOctave + Math.floor(degree / len)
+    // `degree` is anchored to REFERENCE_OCTAVE (the same reference the inverse
+    // uses), so rebuild the octave from it — using surface.baseOctave here would
+    // transpose incoming notes by (baseOctave − REFERENCE_OCTAVE) octaves.
+    const octave = REFERENCE_OCTAVE + Math.floor(degree / len)
     return { index, octave }
   }
 
@@ -1052,6 +1093,9 @@ class InstrumentStore {
   // ------------------------------------------------------------------ autosave
 
   private autosave(): void {
+    // A session seeded from a share link must not clobber the recipient's own
+    // autosave. Hold off until they explicitly save or load a session.
+    if (this.loadedFromUrl) return
     if (this.autosaveTimer) clearTimeout(this.autosaveTimer)
     this.autosaveTimer = setTimeout(() => {
       void db.putAutosave(this.session)

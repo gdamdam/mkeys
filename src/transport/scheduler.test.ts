@@ -38,8 +38,8 @@ describe('swingBeatSeconds', () => {
 
   it('pushes half-beat off-beats by the swing amount', () => {
     const spb = 0.5
-    // beat 0.5 -> eighth index 1 -> swung.
-    expect(swingBeatSeconds(0.5, 120, 1)).toBeCloseTo(0.25 + spb / 3, 12)
+    // beat 0.5 -> eighth index 1 -> swung; swing=1 is a triplet feel (+spb/6).
+    expect(swingBeatSeconds(0.5, 120, 1)).toBeCloseTo(0.25 + spb / 6, 12)
   })
 
   it('is straight when swing is 0', () => {
@@ -86,6 +86,16 @@ describe('planWindow', () => {
     expect(events.map((e) => e.time)).toEqual([1.0, 1.5])
   })
 
+  it('emits (does not drop) events missed when a tick arrives late', () => {
+    // First window [0,1) emits beats 0 and 0.5, advancing the cursor to 1.
+    const a = planWindow(baseState(), 0, 1)
+    expect(a.events.map((e) => e.time)).toEqual([0, 0.5])
+    // A stall: the next tick's window starts at 1.5, past the cursor. The
+    // event at 1.0 (in [cursorSec, windowStart)) must still fire, late, not vanish.
+    const b = planWindow(a.nextState, 1.5, 2.5)
+    expect(b.events.map((e) => e.time)).toEqual([1.0, 1.5, 2.0])
+  })
+
   it('advances the cursor to the window end', () => {
     const { nextState } = planWindow(baseState(), 0, 1)
     expect(nextState.cursorSec).toBeCloseTo(1, 12)
@@ -121,7 +131,7 @@ describe('planWindow', () => {
     })
     const { events } = planWindow(s, 0, 1)
     expect(events[0].time).toBeCloseTo(0, 12) // on-beat unaffected
-    expect(events[1].time).toBeCloseTo(0.25 + 0.5 / 3, 12) // off-beat pushed
+    expect(events[1].time).toBeCloseTo(0.25 + 0.5 / 6, 12) // off-beat pushed (triplet)
   })
 
   it('offsets every cycle by startTimeSec', () => {
@@ -139,8 +149,9 @@ describe('planWindow', () => {
     expect(nextState.cursorSec).toBeCloseTo(2, 12)
   })
 
-  it('returns nothing for a non-positive window', () => {
-    const { events } = planWindow(baseState(), 2, 2)
+  it('returns nothing when the window end is at or before the cursor', () => {
+    // The read boundary is the cursor, so an empty window is windowEnd <= cursor.
+    const { events } = planWindow(baseState({ cursorSec: 2 }), 0, 2)
     expect(events).toEqual([])
   })
 

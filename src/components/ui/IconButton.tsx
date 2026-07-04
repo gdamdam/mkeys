@@ -12,7 +12,10 @@ export interface IconButtonProps
   label: string
   /** The icon element (see icons.tsx). */
   children: ReactNode
-  /** Armed/active/selected — draws the ember accent + aria-pressed. */
+  /**
+   * Toggle state — draws the ember accent and sets aria-pressed. Leave undefined
+   * for momentary buttons (Close/Copy/…) so they don't announce as toggles.
+   */
   active?: boolean
   /** Visual weight. */
   variant?: 'ghost' | 'solid'
@@ -23,7 +26,7 @@ export interface IconButtonProps
 export function IconButton({
   label,
   children,
-  active = false,
+  active,
   variant = 'ghost',
   size = 'md',
   className,

@@ -108,6 +108,10 @@ export interface Instrument {
   /** Replace the whole patch (panels build the next patch immutably). */
   updatePatch: (patch: PatchParams) => void
   setMacro: (name: keyof Macros, value: number) => void
+  /** Master output level (0..1). */
+  setMasterVolume: (v: number) => void
+  /** Pre-FX input gain (0..2, unity 1). */
+  setInputGain: (v: number) => void
   loadPreset: (name: string) => void
 
   // --- performance ---------------------------------------------------------

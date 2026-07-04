@@ -33,19 +33,20 @@ describe('swungBeatTime', () => {
     expect(swungBeatTime(3, 120, 0)).toBeCloseTo(0.75, 12)
   })
 
-  it('delays off-beats by swing * (spb/3) at max swing', () => {
+  it('delays off-beats to a triplet feel (swing * spb/6) at max swing', () => {
     const spb = 0.5
-    // index 1 base = 0.25, +1*(spb/3).
-    expect(swungBeatTime(1, 120, 1)).toBeCloseTo(0.25 + spb / 3, 12)
+    // index 1 base = 0.25, +1*(spb/6) → 2/3 of the beat (classic hard swing).
+    expect(swungBeatTime(1, 120, 1)).toBeCloseTo(0.25 + spb / 6, 12)
+    expect(swungBeatTime(1, 120, 1)).toBeCloseTo((2 * spb) / 3, 12)
   })
 
   it('scales the off-beat delay linearly with swing amount', () => {
     const spb = 0.5
-    expect(swungBeatTime(1, 120, 0.5)).toBeCloseTo(0.25 + 0.5 * (spb / 3), 12)
+    expect(swungBeatTime(1, 120, 0.5)).toBeCloseTo(0.25 + 0.5 * (spb / 6), 12)
   })
 
   it('clamps swing into [0,1]', () => {
     expect(swungBeatTime(1, 120, -5)).toBeCloseTo(0.25, 12)
-    expect(swungBeatTime(1, 120, 5)).toBeCloseTo(0.25 + 0.5 / 3, 12)
+    expect(swungBeatTime(1, 120, 5)).toBeCloseTo(0.25 + 0.5 / 6, 12)
   })
 })

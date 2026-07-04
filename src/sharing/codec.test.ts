@@ -15,6 +15,14 @@ function b64(obj: unknown): string {
   return btoa(unescape(encodeURIComponent(JSON.stringify(obj))))
 }
 
+/** Decode the codec's base64url wire string back to its JSON string. */
+function decodeWire(encoded: string): string {
+  const std = encoded.replace(/-/g, '+').replace(/_/g, '/')
+  const pad = std.length % 4
+  const padded = std + (pad === 2 ? '==' : pad === 3 ? '=' : '')
+  return decodeURIComponent(escape(atob(padded)))
+}
+
 /** A fully-populated, already-canonical session for exact round-trip assertions. */
 function makeSession(overrides: Partial<Session> = {}): Session {
   const base = createDefaultSession()
@@ -93,6 +101,31 @@ describe('encodeSession / decodeSession round-trip', () => {
   })
 })
 
+describe('URL-safe encoding (base64url)', () => {
+  it('emits no +, / or = in the encoded string', () => {
+    // Force a payload likely to hit +/-//= in standard base64 (long name).
+    const s = makeSession({ name: 'zzzz~~~~????>>>>ffff' })
+    const encoded = encodeSession(s)
+    expect(encoded).not.toMatch(/[+/=]/)
+  })
+
+  it('still decodes a percent-encoded fragment', () => {
+    const s = makeSession({ keyRoot: 3 })
+    const encoded = encodeSession(s)
+    // An intermediary percent-encodes the fragment; decode must still work.
+    const back = decodeSession(encodeURIComponent(encoded))
+    expect(back?.keyRoot).toBe(3)
+  })
+
+  it('still decodes legacy +/= base64 links and + mangled to a space', () => {
+    const s = makeSession({ name: 'zzzz~~~~????>>>>ffff', keyRoot: 5 })
+    const legacy = b64(JSON.parse(decodeWire(encodeSession(s))))
+    expect(decodeSession(legacy)?.keyRoot).toBe(5)
+    // A linkifier turned every '+' into a space; the codec recovers it.
+    expect(decodeSession(legacy.replace(/\+/g, ' '))?.keyRoot).toBe(5)
+  })
+})
+
 describe('malformed input', () => {
   it('returns null for an empty string', () => {
     expect(decodeSession('')).toBeNull()
@@ -147,7 +180,7 @@ describe('mode index stability', () => {
       const s = makeSession({ mode })
       const encoded = encodeSession(s)
       // Inspect the wire format: `m` must equal the stable index.
-      const wire = JSON.parse(decodeURIComponent(escape(atob(encoded)))) as { m: number }
+      const wire = JSON.parse(decodeWire(encoded)) as { m: number }
       expect(wire.m).toBe(MODES.indexOf(mode))
       expect(decodeSession(encoded)?.mode).toBe(mode)
     }

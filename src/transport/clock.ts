@@ -24,10 +24,10 @@ export function secondsPerBar(bpm: number, beatsPerBar = 4): number {
  * on-beats and stay on the straight grid; odd indices (1,3,5,…) are the "&"
  * off-beats and are pushed later in time.
  *
- * `swing` ∈ [0,1] is the fraction of `spb/3` by which an off-beat is delayed,
- * so swing = 1 reaches a triplet feel (delay = 1/3 of a beat ≈ classic hard
- * swing) rather than a degenerate "off-beat lands on the next on-beat".
- * swing = 0 is perfectly straight.
+ * `swing` ∈ [0,1] is the fraction of `spb/6` by which an off-beat is delayed.
+ * A straight eighth sits at `spb/2`; triplet ("classic hard") swing puts it at
+ * `2·spb/3`, i.e. an extra `spb/6`, so swing = 1 reaches exactly that triplet
+ * feel. swing = 0 is perfectly straight.
  *
  * @param beatIndex eighth-note index from the start of the loop (0-based)
  * @param bpm       tempo in beats per minute
@@ -41,5 +41,5 @@ export function swungBeatTime(beatIndex: number, bpm: number, swing: number): nu
   const isOffbeat = ((beatIndex % 2) + 2) % 2 === 1
   if (!isOffbeat) return base
   const s = Math.max(0, Math.min(1, swing))
-  return base + s * (spb / 3)
+  return base + s * (spb / 6)
 }

@@ -80,6 +80,11 @@
   flex-wrap: wrap;
 }
 
+/* master output + pre-FX gain sliders in the transport header */
+.levels {
+  min-width: 132px;
+}
+
 /* --- status pill (Link / MIDI readiness) ---------------------------------- */
 .pill {
   display: inline-flex;

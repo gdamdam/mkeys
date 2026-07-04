@@ -91,21 +91,29 @@ export function swingBeatSeconds(startBeat: number, bpm: number, swing: number):
 }
 
 /**
- * PURE planner. Given the transport state and a window [windowStartSec,
- * windowEndSec), returns every event whose absolute `time` (onset) lies in that
- * window, plus a `nextState` whose cursor has advanced to the window end.
+ * PURE planner. Given the transport state and a window whose end is
+ * `windowEndSec`, returns every event whose absolute `time` (onset) lies in
+ * `[cursorSec, windowEndSec)`, plus a `nextState` whose cursor has advanced to
+ * the window end. (`windowStartSec` is accepted for call-site symmetry but the
+ * read boundary is the cursor — see below.)
  *
- * The read cursor is `max(windowStartSec, state.cursorSec)`, so re-planning an
- * overlapping or repeated window never re-emits already-planned events — the
- * half-open interval guarantees gapless, overlap-free continuation.
+ * The read cursor is `state.cursorSec` (where planning last left off), so
+ * re-planning an overlapping window never re-emits already-planned events, and a
+ * tick that arrives *later* than the window (main-thread stall, background-tab
+ * timer clamping) still emits the events in `[cursorSec, windowStartSec)` —
+ * slightly late rather than silently dropped — keeping continuation gapless.
  */
 export function planWindow(
   state: PlanState,
-  windowStartSec: number,
+  _windowStartSec: number,
   windowEndSec: number,
 ): PlanResult {
   const { pattern, loopBeats, bpm, swing, startTimeSec } = state
-  const from = Math.max(windowStartSec, state.cursorSec)
+  // Always continue from where planning last left off. Using the cursor (rather
+  // than max(windowStartSec, cursor)) means a late tick still catches events in
+  // [cursorSec, windowStartSec) instead of dropping them (M4); an early/overlap
+  // re-plan is still overlap-free because the cursor is already past them.
+  const from = state.cursorSec
   const to = windowEndSec
   const nextCursor = Math.max(state.cursorSec, to)
   const nextState: PlanState = { ...state, cursorSec: nextCursor }

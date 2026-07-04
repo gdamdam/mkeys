@@ -26,7 +26,7 @@ export const SCALE_TABLE: Record<Mode, number[]> = {
  * degree in {@link midiToNearestDegree}. Degree 0 at this octave is the tonic
  * (e.g. C4 = 60), matching the surface's default `baseOctave`.
  */
-const REFERENCE_OCTAVE = 4
+export const REFERENCE_OCTAVE = 4
 
 /** Normalise any integer to a pitch class 0–11. */
 export function mod12(n: number): PitchClass {

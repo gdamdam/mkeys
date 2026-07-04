@@ -25,6 +25,8 @@ export function secondsPerBeat(bpm: number): number {
   return 60 / (bpm > 0 ? bpm : 120)
 }
 
+/** Beats per bar; a `division` of N means "1/N note" = BEATS_PER_BAR/N beats. */
+const BEATS_PER_BAR = 4
 /** Longest delay time the chain will produce, in seconds (also the node bound). */
 const MAX_DELAY_SECONDS = 10
 /** Feedback is capped just below unity so the delay never self-oscillates. */
@@ -250,13 +252,14 @@ export class FxChain {
   }
 
   /**
-   * Delay time in seconds. When synced, follows the spec formula
-   * `division * secondsPerBeat(bpm)`; otherwise the raw `time`. Always clamped
-   * into a range the DelayNode can represent.
+   * Delay time in seconds. When synced, `division: N` means a 1/N note, i.e.
+   * `(BEATS_PER_BAR / N) * secondsPerBeat(bpm)` (so 1/8 at 120 BPM = 0.25 s);
+   * otherwise the raw `time`. Always clamped into a range the DelayNode can
+   * represent.
    */
   private computeDelayTime(delay: DelayParams): number {
     const raw = delay.tempoSync
-      ? delay.division * secondsPerBeat(this.bpm)
+      ? (BEATS_PER_BAR / Math.max(1, delay.division)) * secondsPerBeat(this.bpm)
       : delay.time
     return Math.min(MAX_DELAY_SECONDS, Math.max(0.0001, raw))
   }
