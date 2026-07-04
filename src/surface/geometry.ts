@@ -65,6 +65,16 @@ export function cellAt(
   return { degree, octave }
 }
 
+/**
+ * The grid-building config a layout actually uses. The piano strip is a single
+ * row of consecutive degrees (row 0 of the isomorphic mapping); the grid keeps
+ * its full `rows x cols`. Every consumer of a surface's geometry (grid builder,
+ * renderer, pointer hit-testing) must go through this so they stay consistent.
+ */
+export function effectiveSurface(config: SurfaceConfig): SurfaceConfig {
+  return config.layout === 'piano' ? { ...config, rows: 1 } : config
+}
+
 /** Build the full `rows x col` grid, indexed `[row][col]`. */
 export function buildGrid(config: SurfaceConfig, scaleLength: number): GridCell[][] {
   const grid: GridCell[][] = []

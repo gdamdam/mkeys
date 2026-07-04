@@ -44,7 +44,7 @@ import type {
 } from '../components/instrument'
 import { AudioEngine, getPreset } from '../audio'
 import { REFERENCE_OCTAVE, SCALE_TABLE, degreeToMidi, midiToNearestDegree } from '../harmony/scales'
-import { buildGrid } from '../surface/geometry'
+import { buildGrid, effectiveSurface } from '../surface/geometry'
 import { Scheduler, type PatternEvent, type PlannedEvent } from '../transport/scheduler'
 import { secondsPerBeat } from '../transport/clock'
 import { generateArpSequence } from '../transport/arp'
@@ -373,7 +373,7 @@ class InstrumentStore {
 
   private rebuildGrid(): void {
     const scaleLen = SCALE_TABLE[this.session.mode].length
-    const coords = buildGrid(this.session.surface, scaleLen)
+    const coords = buildGrid(effectiveSurface(this.session.surface), scaleLen)
     const root = this.session.keyRoot
     const mode = this.session.mode
     this.grid = coords.map((row) =>

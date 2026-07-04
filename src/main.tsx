@@ -19,10 +19,26 @@ createRoot(rootElement).render(
   </StrictMode>,
 )
 
-// Register the service worker for offline use. Best-effort: a failure (e.g. an
-// unsupported browser or a blocked registration) must never break the app.
+// Register the service worker for offline use — production builds only.
+// Best-effort: a failure (e.g. an unsupported browser or a blocked
+// registration) must never break the app.
+//
+// In dev the SW must not run at all: its cache-first fetch handler pins stale
+// modules, and the localhost:5173 origin is shared by every Vite project, so a
+// worker registered here can serve another app's cached files (and vice
+// versa). Also unregister any previously installed worker so an existing dev
+// profile heals itself on the next load.
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {})
-  })
+  if (import.meta.env.DEV) {
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((regs) => {
+        for (const reg of regs) void reg.unregister()
+      })
+      .catch(() => {})
+  } else {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {})
+    })
+  }
 }

@@ -83,23 +83,9 @@ body {
 }
 
 /* ---------------------------------------------------------------- layout -- *
- * The app shell: the surface fills, chrome flanks. Individual screens compose
- * these; the design keeps them minimal so components own their own look. */
-
-.app {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-/* The hero region the playable surface lives in — grows to fill, never scrolls
- * the page. */
-.app__surface {
-  flex: 1;
-  min-height: 0;
-  position: relative;
-}
+ * The app shell (.app / .app__surface) is owned entirely by App.css — global.css
+ * must not restyle it: this file loads after App.css in the bundle, so a
+ * duplicate .app rule here silently overrides the shell's grid layout. */
 
 /* A generic flex row/stack helper set, so screens don't each reinvent them. */
 .row {

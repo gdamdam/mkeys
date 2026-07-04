@@ -2,8 +2,13 @@
 // vite plugin (replaces the placeholder). It changes whenever any hashed asset
 // changes, so sw.js is no longer byte-identical between deploys — that byte
 // difference is what makes the browser re-install the SW and re-run precache().
-// In dev (unbuilt), it stays the literal placeholder, which is fine.
+// In dev (unbuilt), it stays the literal placeholder.
 const BUILD_HASH = '__BUILD_HASH__'
+// Unbuilt = dev server. A SW must never cache there: localhost origins are
+// shared across projects and cache-first pins stale (even cross-project)
+// modules. Run as a pure pass-through and drop every existing cache so
+// already-poisoned browsers heal on the next SW update check.
+const IS_DEV = BUILD_HASH.startsWith('__')
 // Cache names carry the build hash so activate() purges every prior deploy's
 // shell/runtime caches instead of leaving stale hashed assets behind forever.
 const SHELL_CACHE = `mkeys-shell-${BUILD_HASH}`
@@ -15,6 +20,7 @@ const APP_BASE = new URL('./', self.location.href).pathname
 const SHELL_URLS = [APP_BASE, `${APP_BASE}manifest.webmanifest`, `${APP_BASE}mkeys-mark.svg`]
 
 async function precache() {
+  if (IS_DEV) return
   const cache = await caches.open(SHELL_CACHE)
   await cache.addAll(SHELL_URLS)
   // Precache the content-hashed build assets (JS/CSS/worklet) listed in the
@@ -48,7 +54,7 @@ self.addEventListener('activate', (event) => {
     caches.keys()
       .then((keys) => Promise.all(
         keys
-          .filter((key) => key !== SHELL_CACHE && key !== RUNTIME_CACHE)
+          .filter((key) => IS_DEV || (key !== SHELL_CACHE && key !== RUNTIME_CACHE))
           .map((key) => caches.delete(key)),
       ))
       .then(() => self.clients.claim()),
@@ -67,6 +73,7 @@ async function trimCache(cacheName, maxEntries) {
 }
 
 self.addEventListener('fetch', (event) => {
+  if (IS_DEV) return // pass-through: never answer from caches in dev
   const { request } = event
   if (request.method !== 'GET') return
   if (new URL(request.url).origin !== self.location.origin) return

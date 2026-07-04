@@ -27,6 +27,7 @@ import { useInstrument } from '../../app/useInstrument'
 import type { TouchExpression } from '../../types'
 import { degreeColor } from '../../styles/palette'
 import {
+  effectiveSurface,
   pointerToCell,
   slideTargetCell,
   yToTimbre,
@@ -76,7 +77,9 @@ const readPressure = (e: ReactPointerEvent): number =>
 export function Surface({ className }: SurfaceProps) {
   const instrument = useInstrument()
   const { grid, activeVoices } = instrument
-  const surface = instrument.session.surface
+  // Same effective geometry the store built `grid` from (piano = one row), so
+  // hit-testing and the CSS grid template always match the cells.
+  const surface = effectiveSurface(instrument.session.surface)
   const reduced = useReducedMotion()
 
   const rootRef = useRef<HTMLDivElement>(null)

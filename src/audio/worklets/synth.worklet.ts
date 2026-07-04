@@ -96,6 +96,9 @@ class Envelope {
   }
 
   gateOn(): void {
+    // A past numerical divergence can leave a NaN level, which no stage
+    // arithmetic ever clears (NaN comparisons are all false) — start clean.
+    if (!Number.isFinite(this.level)) this.level = 0
     this.stage = 'attack'
   }
 
@@ -353,14 +356,17 @@ class Voice {
     const envMul = Math.pow(2, filtLevel * f.envAmount * 4)
     const timbreMul = Math.pow(2, this.timbre * 2)
     const lfoMul = Math.pow(2, lfoFilter * 4)
-    let cutoff = f.cutoff * keyMul * envMul * timbreMul * lfoMul
-    // Chamberlin SVF is only stable while fc < fs/4; stay comfortably below it
-    // so envelope/timbre/LFO peaks can't push the coefficient into divergence.
-    cutoff = clamp(cutoff, 20, sampleRate * 0.22)
+    const cutoff = clamp(f.cutoff * keyMul * envMul * timbreMul * lfoMul, 20, sampleRate * 0.22)
 
-    // Chamberlin SVF coefficients (stable while fc < fs/4).
-    const fc = 2 * Math.sin((Math.PI * cutoff) / sampleRate)
+    // Chamberlin SVF coefficients. The discrete update is stable only while
+    // f < sqrt(q² + 4) − q (|eigenvalues| < 1), which is far below the naive
+    // "fc < fs/4" rule — e.g. q = 1.62 caps f at ~0.95, not 2·sin(π/4) ≈ 1.41.
+    // Cap fc against that bound (with margin) or the filter diverges to NaN.
     const q = clamp(2 - f.resonance * 1.9, 0.1, 2)
+    const fc = Math.min(
+      2 * Math.sin((Math.PI * cutoff) / sampleRate),
+      0.9 * (Math.sqrt(q * q + 4) - q),
+    )
 
     let outL = svfStep(this, 'L', oscL, fc, q)
     let outR = svfStep(this, 'R', oscR, fc, q)
@@ -374,8 +380,20 @@ class Voice {
 
     // Amp: envelope × velocity × pressure × (1 + amp-LFO).
     const gain = ampLevel * (0.4 + 0.6 * this.velocity) * (0.6 + 0.4 * this.pressure) * (1 + lfoAmp)
-    acc[0] += outL * gain
-    acc[1] += outR * gain
+    const l = outL * gain
+    const r = outR * gain
+    // Never let a non-finite sample reach the shared bus: downstream FX has a
+    // delay feedback loop where a single NaN circulates forever (permanent
+    // silence). Reset the filter state and emit nothing for this sample.
+    if (!Number.isFinite(l) || !Number.isFinite(r)) {
+      this.lpL = 0
+      this.bpL = 0
+      this.lpR = 0
+      this.bpR = 0
+      return
+    }
+    acc[0] += l
+    acc[1] += r
   }
 
   // SVF integrator access (kept as methods so state stays encapsulated).

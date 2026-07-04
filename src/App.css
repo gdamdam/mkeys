@@ -185,6 +185,13 @@
     border-top: none;
     border-inline-start: 1px solid var(--line);
   }
+  /* The toggle shares the drawer's grid area; docked right it would float
+     dead-centre over the panel content, so pin it to the bottom edge. */
+  .app__drawer-toggle {
+    align-self: end;
+    margin: 0 auto 0.5rem;
+    z-index: 2;
+  }
   .app--focus .app__drawer {
     display: none;
   }
