@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { glidePitch, slideColumnOffset } from './surfaceMath'
+import { columnSpanAt, glidePitch, slideColumnOffset } from './surfaceMath'
 
 describe('slideColumnOffset', () => {
   it('is 0 at the centre of the origin column', () => {
@@ -18,6 +18,48 @@ describe('slideColumnOffset', () => {
   it('clamps x into range and guards zero cols', () => {
     expect(Number.isFinite(slideColumnOffset(2, 0, 0))).toBe(true)
     expect(Number.isFinite(slideColumnOffset(-1, 0, 4))).toBe(true)
+  })
+})
+
+describe('columnSpanAt', () => {
+  // 8 columns: centres at x = (col + 0.5) / 8.
+  const cx = (col: number, cols = 8): number => (col + 0.5) / cols
+
+  it('sits exactly on a column centre with zero progress', () => {
+    expect(columnSpanAt(cx(3), 8)).toEqual({ from: 3, to: 4, t: expect.closeTo(0) })
+  })
+
+  it('is halfway between two adjacent centres at t = 0.5', () => {
+    expect(columnSpanAt((cx(3) + cx(4)) / 2, 8)).toEqual({
+      from: 3,
+      to: 4,
+      t: expect.closeTo(0.5),
+    })
+  })
+
+  it('spans several columns as x travels (multi-note glide)', () => {
+    // Between col 5 and col 6, 30% of the way.
+    const x = cx(5) + 0.3 / 8
+    expect(columnSpanAt(x, 8)).toEqual({ from: 5, to: 6, t: expect.closeTo(0.3) })
+  })
+
+  it('holds on the first column left of its centre', () => {
+    const span = columnSpanAt(0, 8)
+    expect(span.from).toBe(0)
+    expect(span.t).toBeCloseTo(0)
+  })
+
+  it('holds on the last column right of its centre', () => {
+    const span = columnSpanAt(1, 8)
+    expect(span.from).toBe(7)
+    expect(span.to).toBe(7)
+  })
+
+  it('clamps x into range and guards zero cols', () => {
+    expect(() => columnSpanAt(2, 0)).not.toThrow()
+    const span = columnSpanAt(-1, 4)
+    expect(span.from).toBe(0)
+    expect(span.t).toBeCloseTo(0)
   })
 })
 

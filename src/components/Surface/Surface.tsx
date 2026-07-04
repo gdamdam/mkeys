@@ -9,12 +9,14 @@
  * Interaction is Pointer-Events based for real multi-touch polyphony (up to
  * MAX_VOICES). Rather than per-pad handlers, the whole surface captures each
  * pointer and hit-tests by coordinate, so a touch can *slide* across pads — the
- * horizontal slide drives a pitch glide toward the adjacent degree, which is the
- * instrument's signature gesture (visualised by the GlideTrail overlay).
+ * horizontal slide drives a pitch glide across the row, passing through every
+ * degree under the finger, which is the instrument's signature gesture
+ * (visualised by the GlideTrail overlay).
  *
  * Expression mapping (per touch, MPE-style):
- *   - horizontal slide from a pad centre -> pitch glide toward the neighbouring
- *     degree, quantised by `surface.quantize` (surfaceMath + surface/glide).
+ *   - horizontal slide -> pitch glide across as many degrees as the drag
+ *     covers, quantised per crossing by `surface.quantize` (surfaceMath +
+ *     surface/glide).
  *   - vertical position -> timbre (top brightest), via geometry `yToTimbre`.
  *   - pointer pressure -> pressure (fallback for devices that report none).
  *
@@ -26,13 +28,8 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { useInstrument } from '../../app/useInstrument'
 import type { TouchExpression } from '../../types'
 import { degreeColor } from '../../styles/palette'
-import {
-  effectiveSurface,
-  pointerToCell,
-  slideTargetCell,
-  yToTimbre,
-} from '../../surface/geometry'
-import { glidePitch, slideColumnOffset } from './surfaceMath'
+import { effectiveSurface, pointerToCell, yToTimbre } from '../../surface/geometry'
+import { columnSpanAt, glidePitch } from './surfaceMath'
 import { centsOffset, midiToNoteName } from './notes'
 import { useReducedMotion } from './useReducedMotion'
 import { GlideTrail, type TouchView } from './GlideTrail'
@@ -173,17 +170,14 @@ export function Surface({ className }: SurfaceProps) {
     const pos = coords(e)
     if (!pos) return
 
-    // Horizontal slide -> glide toward the adjacent degree (quantised).
-    const offset = slideColumnOffset(pos.x, rec.origin.col, surface.cols)
-    const target = slideTargetCell(
-      { row: rec.origin.row, col: rec.origin.col },
-      Math.sign(offset),
-      surface,
-    )
-    const targetMidi = target
-      ? grid[target.row]?.[target.col]?.midi ?? rec.origin.midi
-      : rec.origin.midi
-    const pitch = glidePitch(rec.origin.midi, targetMidi, offset, surface.quantize)
+    // Horizontal slide -> glide across the row, degree by degree (quantised).
+    // The pitch tracks the pair of columns under the finger, so a long drag
+    // passes through every intermediate note, however far from the origin.
+    const span = columnSpanAt(pos.x, surface.cols)
+    const row = rec.origin.row
+    const fromMidi = grid[row]?.[span.from]?.midi ?? rec.origin.midi
+    const toMidi = grid[row]?.[span.to]?.midi ?? fromMidi
+    const pitch = glidePitch(fromMidi, toMidi, span.t, surface.quantize)
 
     instrument.moveVoice(rec.voiceId, {
       pitch,

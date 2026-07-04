@@ -22,6 +22,34 @@ export function slideColumnOffset(x: number, originCol: number, cols: number): n
   return fx - (originCol + 0.5)
 }
 
+/** The adjacent-column pair a pointer sits between, and its progress across. */
+export interface ColumnSpan {
+  /** Column whose centre is at or left of the pointer. */
+  from: number
+  /** The next column right (equal to `from` at the last column). */
+  to: number
+  /** Progress from `from`'s centre toward `to`'s centre, 0..1. */
+  t: number
+}
+
+/**
+ * Resolve a normalized pointer x (0..1) to the pair of adjacent columns whose
+ * centres bracket it, plus the fractional progress between those centres.
+ *
+ * This is the multi-note glide primitive: as a touch travels across the
+ * surface, `from`/`to` walk column by column so the pitch passes through every
+ * intermediate degree. Left of the first centre / right of the last centre the
+ * span holds on the end column (t clamps to 0, or from == to).
+ */
+export function columnSpanAt(x: number, cols: number): ColumnSpan {
+  const safeCols = cols > 0 ? cols : 1
+  const fx = clamp(x, 0, 1) * safeCols - 0.5
+  const from = clamp(Math.floor(fx), 0, safeCols - 1)
+  const to = Math.min(from + 1, safeCols - 1)
+  const t = clamp(fx - from, 0, 1)
+  return { from, to, t }
+}
+
 /**
  * Fractional MIDI pitch for a slide from the origin pad toward a neighbour.
  *
