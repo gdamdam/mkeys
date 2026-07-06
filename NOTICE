@@ -29,6 +29,13 @@ author and suite. The following portions are derived from sibling projects:
   derived from **mchord** (src/harmony/scales.ts, src/transport/,
   src/sharing/, src/persistence/).
 
+* The mbus tab-to-tab audio client (src/transport/mbus/) — vendored **verbatim**
+  from **mbus** (packages/mbus-client: client.ts, protocol.ts; the index.ts
+  re-export carries this credit). The suite has no shared package registry yet,
+  so the library is copied and credited rather than imported; it is kept
+  byte-for-byte with upstream so it stays trivially re-syncable — change it
+  upstream and re-copy, never edit here.
+
 These derivations were confirmed by the suite lead. Because every source project
 is AGPL-3.0-or-later by the same author, the reuse is covered by that license;
 this NOTICE records the lineage for attribution and transparency.

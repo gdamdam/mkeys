@@ -155,6 +155,11 @@ export interface Instrument {
   link: LinkStatus
   toggleLink: () => void
 
+  // --- mbus publish (optional patchbay, same bridge) ------------------------
+  /** True while the master output is offered to the mbus patchbay. */
+  mbusPublishing: boolean
+  toggleMbusPublish: () => void
+
   // --- note routing --------------------------------------------------------
   /**
    * The playable surface, derived from `session.surface` + key/mode, indexed

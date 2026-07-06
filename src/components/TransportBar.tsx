@@ -137,6 +137,24 @@ export function TransportBar() {
             onChange={() => inst.toggleLink()}
           />
         </div>
+        <div
+          className="transport__row"
+          title={
+            inst.mbusPublishing
+              ? 'Publishing the master output to the mbus patchbay (via the local link-bridge)'
+              : 'Publish the master output to the mbus patchbay (needs the local link-bridge; harmless without it)'
+          }
+        >
+          <span className={inst.mbusPublishing ? 'pill pill--live' : 'pill'}>
+            <span className="pill__dot" />
+            {inst.mbusPublishing ? 'bus on' : 'bus'}
+          </span>
+          <Toggle
+            aria-label="Publish to mbus"
+            checked={inst.mbusPublishing}
+            onChange={() => inst.toggleMbusPublish()}
+          />
+        </div>
       </div>
 
       {/* MIDI */}

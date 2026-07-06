@@ -56,6 +56,11 @@ import {
   sendLinkTempo,
   type LinkState,
 } from '../transport/linkBridge'
+import {
+  createMbusClient,
+  type MbusClient,
+  type Publication,
+} from '../transport/mbus'
 import { parseMidiMessage } from '../midi/parse'
 import { NoteOwnership } from '../midi/ownership'
 import * as db from '../persistence/db'
@@ -174,6 +179,14 @@ class InstrumentStore {
   private linkState: LinkState = getLinkState()
   private linkUnsub: (() => void) | null = null
 
+  // mbus publish: offer the master output to the mbus patchbay over the local
+  // link-bridge (see src/transport/mbus). Off by default; until enabled no
+  // client exists and no socket is opened. Session-transient on purpose, like
+  // linkEnabledFlag.
+  private mbus: MbusClient | null = null
+  private mbusPub: Publication | null = null
+  private mbusPublishWanted = false
+
   private savedSessions: SavedSessionMeta[] = []
 
   // --- voice bookkeeping ---
@@ -275,6 +288,8 @@ class InstrumentStore {
       enableMidi: this.enableMidi,
       link,
       toggleLink: this.toggleLink,
+      mbusPublishing: this.mbusPublishWanted,
+      toggleMbusPublish: this.toggleMbusPublish,
       grid: this.grid,
       noteOnAt: this.noteOnAt,
       moveVoice: this.moveVoice,
@@ -316,6 +331,9 @@ class InstrumentStore {
       void this.refreshSavedSessions()
 
       if (this.session.arp.enabled) this.rebuildArp()
+
+      // Publish intent recorded before the engine existed (toggle pre-start).
+      this.applyMbusPublish()
 
       this.startedFlag = true
       this.emit()
@@ -1088,6 +1106,31 @@ class InstrumentStore {
     this.linkEnabledFlag = !this.linkEnabledFlag
     enableLinkBridge(this.linkEnabledFlag)
     this.emit()
+  }
+
+  // ------------------------------------------------------------------ mbus publish
+
+  toggleMbusPublish = (): void => {
+    this.mbusPublishWanted = !this.mbusPublishWanted
+    this.applyMbusPublish()
+    this.emit()
+  }
+
+  /** Reconcile the publish intent with the live graph. Enable is deferred until
+   *  the engine is running (start() re-applies); disable unannounces the source
+   *  and drops the bridge socket so "off" leaves nothing running. */
+  private applyMbusPublish(): void {
+    if (this.mbusPublishWanted) {
+      const master = this.engine.masterGain
+      if (!master || this.mbusPub) return
+      this.mbus ??= createMbusClient()
+      this.mbus.connect()
+      this.mbusPub = this.mbus.publishOutput(master, 'mkeys')
+    } else {
+      this.mbusPub?.stop()
+      this.mbusPub = null
+      this.mbus?.disconnect()
+    }
   }
 
   // ------------------------------------------------------------------ autosave

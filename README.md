@@ -41,6 +41,7 @@
 - **FX tail** — a shared master chain: drive, chorus, tempo-syncable delay, reverb, and a master limiter. Click-free, no runaway peaks.
 - **Optional MIDI in + out** — receive from a controller and send the *actual played notes* with correct note-ownership and note-offs. Never required.
 - **Optional Ableton Link** — tempo-follow via the companion **mpump** link-bridge; degrades gracefully when it's absent.
+- **Optional mbus publish** — the “bus” toggle next to Link offers the master output to the [mbus](https://mbus.mpump.live) patchbay as a source named `mkeys` (tab-to-tab WebRTC via the same link-bridge, peer-to-peer, no server). Off by default; harmless without the bridge.
 - **Sessions, JSON & share links** — the working session autosaves; named sessions use local persistence (IndexedDB), readable JSON import/export, and self-contained share links — no backend.
 - **Master WAV capture** — record the master bus straight to a `.wav` file, entirely in the browser.
 - **Installable PWA** — offline after one visit, local-first, no account.
@@ -127,6 +128,7 @@ Everything is local. No account, no cookies, no telemetry, no fingerprinting. Th
 - **Web MIDI** is requested only when you enable it, and is optional (Chromium-family browsers).
 - **Pressure** dynamics need supporting hardware (a pressure-sensitive touchscreen or stylus); without it, touches use a firm default and the other axes still work.
 - **Ableton Link** needs the companion **mpump** link-bridge running locally (`ws://localhost:19876`); without it the Link panel simply stays offline.
+- **mbus publish** rides the same link-bridge; without it the “bus” toggle just keeps retrying quietly and nothing is published. Audio flows tab-to-tab over WebRTC and never leaves the machine.
 - A PWA install does not provide background or lock-screen audio.
 
 ## Repository map
@@ -140,6 +142,7 @@ src/
   surface/            pure surface geometry + glide math (geometry · glide)
   transport/          lookahead scheduler + arp + Ableton Link adapter
     arp · scheduler · clock · linkBridge · linkClock
+    mbus/             vendored mbus-client (patchbay publish; see NOTICE)
   audio/              AudioWorklet synth engine
     engine · fx · macros · presets · recorder · index
     worklets/         synth.worklet · recorder.worklet · silence.worklet
