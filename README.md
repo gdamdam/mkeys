@@ -4,13 +4,6 @@
 
 **Touch a note. Bend into the next. Never leave the scale.**
 
-<pre>
-┌─┬─┬─┬─┬─┬─┬─┬─┐
-│ ●───────▶     │
-├─┴─┴─┴─┴─┴─┴─┴─┤
-│ m k e y s     │
-└───────────────┘
-</pre>
 
 [![version](https://img.shields.io/badge/version-0.1.12-6c8f3a)](./package.json)
 [![license](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](./LICENSE)
