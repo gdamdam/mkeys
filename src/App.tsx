@@ -43,6 +43,13 @@ export default function App() {
     return (
       <main className="poweron">
         <div className="poweron__inner">
+          <img
+            className="poweron__mark"
+            src={`${import.meta.env.BASE_URL}mkeys-mark.svg`}
+            alt=""
+            width={96}
+            height={96}
+          />
           <h1 className="poweron__wordmark">
             m<em>keys</em>
           </h1>

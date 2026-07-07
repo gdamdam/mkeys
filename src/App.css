@@ -125,6 +125,11 @@
   align-items: center;
   gap: 1.1rem;
 }
+.poweron__mark {
+  inline-size: 96px;
+  block-size: 96px;
+  border-radius: 20px;
+}
 .poweron__wordmark {
   margin: 0;
   font: 400 clamp(3rem, 12vw, 5.5rem)/0.95 var(--font-display);
