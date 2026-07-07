@@ -463,6 +463,8 @@ class SynthProcessor extends AudioWorkletProcessor {
   private readonly voices: Voice[] = []
   private lfoPhase = 0
   private bpm = 120
+  /** Per-sample stereo accumulator, reused across render quanta to avoid GC. */
+  private readonly acc = new Float32Array(2)
 
   constructor() {
     super()
@@ -530,7 +532,7 @@ class SynthProcessor extends AudioWorkletProcessor {
     const lfoInc = this.lfoFrequency() / sampleRate
     const depth = clamp(this.patch.lfo.depth, 0, 1)
     const target = this.patch.lfo.target
-    const acc = new Float32Array(2)
+    const acc = this.acc
 
     for (let i = 0; i < BLOCK; i++) {
       // Global LFO (sine, bipolar).
