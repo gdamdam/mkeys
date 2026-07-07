@@ -63,7 +63,9 @@ export function TransportBar() {
 
   return (
     <div className="transport">
-      <h1 className="transport__wordmark">mkeys</h1>
+      <h1 className="transport__wordmark">
+        <img src={`${import.meta.env.BASE_URL}mkeys-wordmark.svg`} alt="mkeys" width={120} height={40} />
+      </h1>
 
       {/* master output level + pre-FX input gain */}
       <div className="transport__block levels">
