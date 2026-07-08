@@ -5,16 +5,16 @@
 **Touch a note. Bend into the next. Never leave the scale.**
 
 
-[![version](https://img.shields.io/badge/version-0.1.16-6c8f3a)](./package.json)
+[![version](https://img.shields.io/badge/version-0.1.17-6c8f3a)](./package.json)
 [![license](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](./LICENSE)
-[![tests](https://img.shields.io/badge/tests-279%20passing-2ea043)](#verification)
+[![tests](https://img.shields.io/badge/tests-283%20passing-2ea043)](#verification)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](./tsconfig.json)
 [![React](https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=white)](https://react.dev)
 [![Vite](https://img.shields.io/badge/Vite-8-646cff?logo=vite&logoColor=white)](https://vite.dev)
 [![Web Audio](https://img.shields.io/badge/Web%20Audio-AudioWorklet-ff6d00)](https://developer.mozilla.org/docs/Web/API/AudioWorklet)
 [![PWA](https://img.shields.io/badge/PWA-installable-5a0fc8)](#progressive-web-app)
 
-### [▶ Play it live → mkeys.mpump.live](https://mkeys.mpump.live)
+### [▶ Play it live in your browser → mkeys.mpump.live](https://mkeys.mpump.live)
 
 ![mkeys screenshot](./mkeys_screenshot.gif)
 
@@ -74,6 +74,14 @@ Two QWERTY rows map onto the first two rows of the surface, so you can play with
 
 Keyboard presses use a fixed neutral expression (no glide, mid timbre, firm pressure) — the continuous axes are reserved for touch and pointer input.
 
+## Latency & live use
+
+Audio in the browser has an unavoidable round-trip delay — the hardware output buffer plus the `AudioContext`'s `baseLatency` and `outputLatency` — **typically ~10–30 ms**. That's a platform floor no web app can beat, so mkeys opens its context with `latencyHint: 'interactive'` (smallest safe buffer) and **reports the measured figure** in **Session → Output latency** rather than implying it's zero.
+
+Where mkeys shines: **loop- and production-oriented playing**, sound design, and **performing *into* the app** — touch / keyboard / MIDI → synth → WAV capture or MIDI out. For all of those the round-trip sits comfortably inside a good feel.
+
+What it can't do: **sub-5 ms live monitoring of an external instrument**. If you're monitoring a live source (say a controller feeding a hardware synth alongside mkeys), route the **dry** signal through your interface's **direct / hardware monitoring** for zero-latency feel and let mkeys add the **wet** processed layer on top.
+
 ## Architecture
 
 ```text
@@ -99,7 +107,7 @@ transport/ Scheduler (lookahead,  ◀── sample ─────┤           
 ## Verification
 
 ```bash
-npm run check   # typecheck + lint + 279 tests + production build
+npm run check   # typecheck + lint + 283 tests + production build
 ```
 
 Tests are deterministic and live next to the code (scales & degrees, surface geometry, glide/quantize math, arp, scheduler planning, MIDI bytes + note ownership, persistence, share round-trips, keyboard map). Vitest runs in a Node environment, so **touch-feel and audio quality are covered by a manual physical-device QA checklist** (phone + tablet + desktop), not unit tests:

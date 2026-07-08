@@ -175,6 +175,19 @@ export function SessionBar() {
         </div>
       </section>
 
+      {/* Output latency — an honest readout of the platform round-trip floor. */}
+      <section className="pgroup">
+        <span className="pgroup__title eyebrow">Output latency</span>
+        <div className="transport__row">
+          <span
+            className="pill"
+            title="The browser adds a round-trip delay (hardware buffer + base/output latency), typically 10–30 ms. This is a platform floor the app can't lower. For zero-latency monitoring of a live instrument, use your interface's direct/hardware monitoring for the dry signal."
+          >
+            ≈ {inst.latencyMs != null ? Math.round(inst.latencyMs) : '—'} ms round-trip
+          </span>
+        </div>
+      </section>
+
       {toast ? (
         <p className={toast.warn ? 'ptoast ptoast--warn' : 'ptoast'} role="status">
           {toast.text}

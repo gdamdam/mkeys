@@ -90,6 +90,12 @@ export interface Instrument {
   start: () => void | Promise<void>
   /** All notes off, everywhere. */
   panic: () => void
+  /**
+   * Measured round-trip latency estimate in ms from the live AudioContext, or
+   * null before {@link start}. Reflects the platform floor (hardware buffer +
+   * base/output latency) — the app cannot lower it; it only reports it.
+   */
+  latencyMs: number | null
 
   // --- musical -------------------------------------------------------------
   setKeyRoot: (pc: PitchClass) => void

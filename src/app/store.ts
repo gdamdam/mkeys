@@ -265,6 +265,7 @@ class InstrumentStore {
       started: this.startedFlag,
       start: this.start,
       panic: this.panic,
+      latencyMs: this.engine.latencyMs(),
       setKeyRoot: this.setKeyRoot,
       setMode: this.setMode,
       setLayout: this.setLayout,

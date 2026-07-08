@@ -90,6 +90,15 @@ export class AudioEngine {
   }
 
   /**
+   * Measured round-trip latency estimate in ms from the live context, or null
+   * before {@link start}. This is what the platform reports — not a target we
+   * can lower; the browser round-trip is a floor no code can beat.
+   */
+  latencyMs(): number | null {
+    return this.ctx ? estimateRoundTripMs(this.ctx) : null
+  }
+
+  /**
    * Create and wire the audio graph. MUST be called from a user gesture so the
    * AudioContext is allowed to start. Idempotent — a second call is a no-op.
    */
@@ -107,7 +116,11 @@ export class AudioEngine {
   }
 
   private async build(): Promise<void> {
-    const ctx = new AudioContext()
+    // 'interactive' asks the platform for the smallest safe output buffer — the
+    // right hint for a played instrument, and what the other m-suite apps use.
+    // It only nudges the buffer size; the ~10–30 ms browser round-trip floor
+    // (hardware buffer + baseLatency + outputLatency) is unaffected.
+    const ctx = new AudioContext({ latencyHint: 'interactive' })
     try {
       await ctx.resume()
       // Register both worklet modules before instantiating any node from them.
@@ -260,6 +273,25 @@ export class AudioEngine {
   private post(cmd: WorkletCommand): void {
     this.node?.port.postMessage(cmd)
   }
+}
+
+/** The read-only AudioContext latency fields the readout measures (seconds). */
+export interface LatencyFields {
+  baseLatency?: number
+  outputLatency?: number
+}
+
+/**
+ * Measured round-trip latency estimate, in milliseconds:
+ * `(baseLatency + outputLatency) * 1000`. Either field may be missing (Safari
+ * exposes no `outputLatency`; some engines neither), so we sum whatever is
+ * present — the readout degrades gracefully instead of reading NaN. This is a
+ * report of the platform floor, not something the app can reduce.
+ */
+export function estimateRoundTripMs(ctx: LatencyFields): number {
+  const base = typeof ctx.baseLatency === 'number' ? ctx.baseLatency : 0
+  const output = typeof ctx.outputLatency === 'number' ? ctx.outputLatency : 0
+  return (base + output) * 1000
 }
 
 /** Mirror of the worklet's dotted-path setter, kept in sync on the main thread. */
