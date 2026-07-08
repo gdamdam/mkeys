@@ -86,6 +86,14 @@ const CHORD_MODES: readonly ChordMode[] = ['off', 'unison', 'fifth', 'octave', '
 const LAYOUTS = ['grid', 'piano'] as const
 const PHRASE_EVENT_TYPES = ['on', 'off'] as const
 
+/**
+ * Hard bounds on phrase size. A phrase is a short musical loop, so these are
+ * generous relative to any real take yet small enough that an untrusted import
+ * (or a runaway live recording) cannot exhaust memory or wedge the scheduler.
+ */
+export const MAX_PHRASE_EVENTS = 4096
+export const MAX_PHRASE_LENGTH_BEATS = 1024
+
 /* ------------------------------------------------------------------ */
 /* Defaults                                                            */
 /* ------------------------------------------------------------------ */
@@ -302,7 +310,7 @@ function sanitizeEvent(v: unknown): PhraseEvent | null {
     return null
   }
   const event: PhraseEvent = {
-    time: num(prop(v, 'time'), 0, Number.MAX_SAFE_INTEGER, 0),
+    time: num(prop(v, 'time'), 0, MAX_PHRASE_LENGTH_BEATS, 0),
     type: type as PhraseEvent['type'],
     degree: int(prop(v, 'degree'), -128, 128, 0),
     octave: int(prop(v, 'octave'), -2, 10, 4),
@@ -316,11 +324,14 @@ function sanitizePhrase(v: unknown): Phrase | null {
   if (!isObject(v)) return null
   const rawEvents = prop(v, 'events')
   const events: PhraseEvent[] = Array.isArray(rawEvents)
-    ? rawEvents.map(sanitizeEvent).filter((e): e is PhraseEvent => e !== null)
+    ? rawEvents
+        .slice(0, MAX_PHRASE_EVENTS)
+        .map(sanitizeEvent)
+        .filter((e): e is PhraseEvent => e !== null)
     : []
   return {
     events,
-    lengthBeats: num(prop(v, 'lengthBeats'), 0, Number.MAX_SAFE_INTEGER, 4),
+    lengthBeats: num(prop(v, 'lengthBeats'), 0, MAX_PHRASE_LENGTH_BEATS, 4),
   }
 }
 

@@ -64,7 +64,12 @@ import {
 import { parseMidiMessage } from '../midi/parse'
 import { NoteOwnership } from '../midi/ownership'
 import * as db from '../persistence/db'
-import { defaultSession, sanitizeSession } from '../persistence/session'
+import {
+  MAX_PHRASE_EVENTS,
+  MAX_PHRASE_LENGTH_BEATS,
+  defaultSession,
+  sanitizeSession,
+} from '../persistence/session'
 import { sessionFromUrl } from '../sharing/codec'
 
 /** Fixed seed so a given held chord always arpeggiates identically (share-safe). */
@@ -729,6 +734,9 @@ class InstrumentStore {
     octave: number,
     expr: TouchExpression,
   ): void {
+    // Cap live captures so an unattended recording can't grow unbounded; the
+    // same ceiling the import path enforces in sanitizePhrase.
+    if (this.recordedEvents.length >= MAX_PHRASE_EVENTS) return
     const beat = (this.ctxNow() - this.recordStartCtx) / secondsPerBeat(this.computeEffectiveBpm())
     this.recordedEvents.push({
       time: Math.max(0, beat),
@@ -744,7 +752,10 @@ class InstrumentStore {
       const events = this.recordedEvents
       let maxBeat = 0
       for (const e of events) maxBeat = Math.max(maxBeat, e.time)
-      const lengthBeats = Math.max(BEATS_PER_BAR, Math.ceil(maxBeat / BEATS_PER_BAR) * BEATS_PER_BAR)
+      const lengthBeats = Math.min(
+        MAX_PHRASE_LENGTH_BEATS,
+        Math.max(BEATS_PER_BAR, Math.ceil(maxBeat / BEATS_PER_BAR) * BEATS_PER_BAR),
+      )
       this.session = { ...this.session, phrase: { events, lengthBeats } }
       this.recorderState = 'idle'
       this.autosave()

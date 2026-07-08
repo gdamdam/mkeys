@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { MODES, SESSION_VERSION } from '../types'
 import type { Session } from '../types'
 import {
+  MAX_PHRASE_EVENTS,
+  MAX_PHRASE_LENGTH_BEATS,
   defaultSession,
   exportSessionJSON,
   importSessionJSON,
@@ -199,6 +201,23 @@ describe('sanitizeSession — phrase & arrays element-wise', () => {
     // expression clamped element-wise
     expect(phrase.events[1]?.expression?.timbre).toBe(1)
     expect(phrase.events[1]?.expression?.pressure).toBe(0)
+  })
+
+  it('caps event count and clamps lengthBeats against oversized imports', () => {
+    const events = Array.from({ length: MAX_PHRASE_EVENTS + 500 }, (_, i) => ({
+      time: i,
+      type: i % 2 === 0 ? 'on' : 'off',
+      degree: 0,
+      octave: 4,
+    }))
+    const s = sanitizeSession({
+      phrase: { lengthBeats: Number.MAX_SAFE_INTEGER, events },
+    })
+    const phrase = s.phrase as NonNullable<Session['phrase']>
+    expect(phrase.events).toHaveLength(MAX_PHRASE_EVENTS)
+    expect(phrase.lengthBeats).toBe(MAX_PHRASE_LENGTH_BEATS)
+    // per-event time is also bounded to the max loop length
+    expect(phrase.events.every((e) => e.time <= MAX_PHRASE_LENGTH_BEATS)).toBe(true)
   })
 })
 
