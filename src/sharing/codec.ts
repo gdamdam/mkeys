@@ -40,7 +40,9 @@ import {
   type SurfaceConfig,
   type TouchExpression,
   type UnisonParams,
+  type PortableTuning,
 } from '../types'
+import { isValidTuning, normalizeTuning, periodCents } from '../vendor/tuning-core/model'
 
 /** Stable URL-fragment param key: `…#k=<payload>`. */
 const FRAGMENT_KEY = 'k'
@@ -95,6 +97,8 @@ type CompactExpr = [number, number, number, number]
 type CompactEvent = [number, number, number, number, CompactExpr | null]
 /** [lengthBeats, events] */
 type CompactPhrase = [number, CompactEvent[]]
+/** [tonicHz, period, name, scaleCents[]] */
+type CompactTuning = [number, number, string, number[]]
 
 interface CompactPatch {
   o1: CompactOsc
@@ -131,6 +135,7 @@ interface CompactSession {
   cm: number // chordMode index
   mi: CompactMidi
   ph: CompactPhrase | null
+  tn?: CompactTuning // tuning (optional; absent = 12-TET)
   pn?: string // presetName (optional)
   mv?: number // masterVolume (optional; absent in older payloads)
   ig?: number // inputGain (optional; absent in older payloads)
@@ -414,6 +419,11 @@ function sanitizeEvent(raw: unknown): PhraseEvent | null {
   return event
 }
 
+/** Accept a tuning only if it is a valid PortableTuning; else undefined (12-TET). */
+function sanitizeTuning(raw: unknown): PortableTuning | undefined {
+  return isValidTuning(raw) ? normalizeTuning(raw) : undefined
+}
+
 function sanitizePhrase(raw: unknown): Phrase | null {
   if (!isRecord(raw)) return null
   const events = Array.isArray(raw.events)
@@ -449,6 +459,8 @@ export function sanitizeSession(raw: unknown): Session {
     midi: sanitizeMidi(r.midi, fb.midi),
     phrase: r.phrase === null || r.phrase === undefined ? null : sanitizePhrase(r.phrase),
   }
+  const tuning = sanitizeTuning(r.tuning)
+  if (tuning) session.tuning = tuning
   if (typeof r.presetName === 'string') session.presetName = r.presetName
   return session
 }
@@ -536,6 +548,9 @@ function toCompact(s: Session): CompactSession {
     ph: encodePhrase(s.phrase),
     mv: s.masterVolume,
     ig: s.inputGain,
+  }
+  if (s.tuning) {
+    compact.tn = [s.tuning.tonicHz, periodCents(s.tuning), s.tuning.name, [...s.tuning.scaleCents]]
   }
   if (s.presetName !== undefined) compact.pn = s.presetName
   return compact
@@ -668,6 +683,15 @@ function fromCompact(raw: unknown): Record<string, unknown> {
     // supplies the default (1) rather than nn()'s 0 (which would be silence).
     masterVolume: raw.mv,
     inputGain: raw.ig,
+  }
+  if (Array.isArray(raw.tn)) {
+    const [tonicHz, period, name, scaleCents] = raw.tn as unknown[]
+    loose.tuning = {
+      tonicHz: nn(tonicHz),
+      period: nn(period),
+      name: typeof name === 'string' ? name : undefined,
+      scaleCents: Array.isArray(scaleCents) ? scaleCents : undefined,
+    }
   }
   if (typeof raw.pn === 'string') loose.presetName = raw.pn
   return loose

@@ -8,6 +8,7 @@
  */
 
 import { MODES, SESSION_VERSION } from '../types'
+import { isValidTuning, normalizeTuning } from '../vendor/tuning-core/model'
 import type {
   ArpConfig,
   ChordMode,
@@ -24,6 +25,7 @@ import type {
   PatchParams,
   Phrase,
   PhraseEvent,
+  PortableTuning,
   ReverbParams,
   Session,
   SurfaceConfig,
@@ -362,9 +364,16 @@ export function sanitizeSession(raw: unknown): Session {
     midi: sanitizeMidi(prop(raw, 'midi'), d.midi),
     phrase: sanitizePhrase(prop(raw, 'phrase')),
   }
+  const tuning = sanitizeTuning(prop(raw, 'tuning'))
+  if (tuning) s.tuning = tuning
   const presetName = prop(raw, 'presetName')
   if (typeof presetName === 'string') s.presetName = presetName
   return s
+}
+
+/** Accept a tuning only if it is a valid PortableTuning; else undefined (12-TET). */
+function sanitizeTuning(raw: unknown): PortableTuning | undefined {
+  return isValidTuning(raw) ? normalizeTuning(raw) : undefined
 }
 
 /**
