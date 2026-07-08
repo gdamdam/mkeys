@@ -5,9 +5,9 @@
 **Touch a note. Bend into the next. Never leave the scale.**
 
 
-[![version](https://img.shields.io/badge/version-0.1.12-6c8f3a)](./package.json)
+[![version](https://img.shields.io/badge/version-0.1.15-6c8f3a)](./package.json)
 [![license](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](./LICENSE)
-[![tests](https://img.shields.io/badge/tests-272%20passing-2ea043)](#verification)
+[![tests](https://img.shields.io/badge/tests-273%20passing-2ea043)](#verification)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](./tsconfig.json)
 [![React](https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=white)](https://react.dev)
 [![Vite](https://img.shields.io/badge/Vite-8-646cff?logo=vite&logoColor=white)](https://vite.dev)
@@ -99,7 +99,7 @@ transport/ Scheduler (lookahead,  ◀── sample ─────┤           
 ## Verification
 
 ```bash
-npm run check   # typecheck + lint + 272 tests + production build
+npm run check   # typecheck + lint + 273 tests + production build
 ```
 
 Tests are deterministic and live next to the code (scales & degrees, surface geometry, glide/quantize math, arp, scheduler planning, MIDI bytes + note ownership, persistence, share round-trips, keyboard map). Vitest runs in a Node environment, so **touch-feel and audio quality are covered by a manual physical-device QA checklist** (phone + tablet + desktop), not unit tests:
