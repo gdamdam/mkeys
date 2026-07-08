@@ -5,9 +5,9 @@
 **Touch a note. Bend into the next. Never leave the scale.**
 
 
-[![version](https://img.shields.io/badge/version-0.1.17-6c8f3a)](./package.json)
+[![version](https://img.shields.io/badge/version-0.1.18-6c8f3a)](./package.json)
 [![license](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](./LICENSE)
-[![tests](https://img.shields.io/badge/tests-283%20passing-2ea043)](#verification)
+[![tests](https://img.shields.io/badge/tests-297%20passing-2ea043)](#verification)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](./tsconfig.json)
 [![React](https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=white)](https://react.dev)
 [![Vite](https://img.shields.io/badge/Vite-8-646cff?logo=vite&logoColor=white)](https://vite.dev)
@@ -31,6 +31,7 @@
 - **8-voice polyphony** — up to eight simultaneous touches, each tracked as its own voice with clean note-offs and no hung notes.
 - **AudioWorklet synth** — a hand-written voice on the audio thread: 2 oscillators + sub + noise, a resonant filter, two envelopes (amp + filter), an LFO, unison, and glide. DSP runs off the main thread for stable, low-jitter sound.
 - **14 factory presets** across five families — leads (Solar Filament, Neon Cantabile, Copper Wire), pads (Cathedral Dust, Slow Aurora, Velvet Fog), plucks (Rain on Tin, Glass Marbles), bass (Tarpit, Gravel Road), and ambient (Distant Weather, Lantern Drift, Tape Horizon, Underwater Bells).
+- **Microtuning & scales** — play any tuning, not just 12-TET: pick a built-in scale (just intonation, meantone, maqam, gamelan, 19/22/31-EDO…) or import a Scala **`.scl`** scale and **`.kbm`** keyboard map. Arbitrary note counts and non-octave periods (e.g. Bohlen-Pierce) are supported; the resolved per-note frequency crosses to the audio worklet, so retuning is exact and 12-TET stays the click-identical default. The tuning core is vendored verbatim from **[mdrone](https://mdrone.mpump.live)** (`npm run vendored:check`; see [`NOTICE`](./NOTICE)).
 - **Four performance macros** — **Glow · Motion · Air · Grit** — each sweeps a curated group of synth and FX parameters for fast, musical shaping.
 - **Performance tools** — arpeggiator, chord mode, latch, and a phrase recorder for building up and looping ideas hands-free.
 - **FX tail** — a shared master chain: drive, chorus, tempo-syncable delay, reverb, and a master limiter. Click-free, no runaway peaks.
@@ -61,7 +62,9 @@ Open the URL Vite prints — audio starts on your first interaction (touching th
 | `npm run test` | Vitest (run once) |
 | `npm run test:watch` | Vitest in watch mode |
 | `npm run typecheck` | Type-check without emit |
-| `npm run check` | **typecheck + lint + test + build** (the full gate) |
+| `npm run vendored:check` | Verify the vendored tuning core matches `../mdrone/src/tuning` |
+| `npm run vendored:sync` | Refresh the vendored tuning core from `../mdrone` |
+| `npm run check` | **vendored:check + typecheck + lint + test + build** (the full gate) |
 
 ## Keyboard
 
@@ -107,7 +110,7 @@ transport/ Scheduler (lookahead,  ◀── sample ─────┤           
 ## Verification
 
 ```bash
-npm run check   # typecheck + lint + 283 tests + production build
+npm run check   # vendored:check + typecheck + lint + 297 tests + production build
 ```
 
 Tests are deterministic and live next to the code (scales & degrees, surface geometry, glide/quantize math, arp, scheduler planning, MIDI bytes + note ownership, persistence, share round-trips, keyboard map). Vitest runs in a Node environment, so **touch-feel and audio quality are covered by a manual physical-device QA checklist** (phone + tablet + desktop), not unit tests:
@@ -141,7 +144,8 @@ src/
   types.ts            shared contracts — every cross-module type lives here
   App.tsx             UI composition + global keyboard
   main.tsx            entry, service-worker registration, font imports
-  harmony/            pure scale/degree theory (scales)
+  harmony/            pure scale/degree theory (scales · tuning resolver)
+  vendor/             tuning-core/ vendored verbatim from mdrone (see NOTICE)
   surface/            pure surface geometry + glide math (geometry · glide)
   transport/          lookahead scheduler + arp + Ableton Link adapter
     arp · scheduler · clock · linkBridge · linkClock

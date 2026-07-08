@@ -36,6 +36,15 @@ author and suite. The following portions are derived from sibling projects:
   byte-for-byte with upstream so it stays trivially re-syncable — change it
   upstream and re-copy, never edit here.
 
+* The portable tuning core (src/vendor/tuning-core/: model.ts, scala.ts,
+  builtins.ts) — vendored **verbatim** from **mdrone** (src/tuning/, at commit
+  8b614cd). Each file carries a credit header above a marker line; everything
+  below the marker is byte-identical to upstream. It powers mkeys' microtuning
+  (arbitrary-N scales, Scala .scl/.kbm import, non-octave periods). As with the
+  mbus client, it is copied and credited rather than imported, and kept
+  re-syncable via `npm run vendored:check` / `npm run vendored:sync` — change it
+  upstream and re-copy, never edit here.
+
 These derivations were confirmed by the suite lead. Because every source project
 is AGPL-3.0-or-later by the same author, the reuse is covered by that license;
 this NOTICE records the lineage for attribution and transparency.
