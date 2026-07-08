@@ -24,6 +24,7 @@ import type {
   Mode,
   PatchParams,
   PitchClass,
+  PortableTuning,
   Session,
   SurfaceConfig,
   TouchExpression,
@@ -100,6 +101,8 @@ export interface Instrument {
   // --- musical -------------------------------------------------------------
   setKeyRoot: (pc: PitchClass) => void
   setMode: (mode: Mode) => void
+  /** Load a microtuning (arbitrary N, non-octave periods) or clear to 12-TET (null). */
+  setTuning: (tuning: PortableTuning | null) => void
   setLayout: (layout: SurfaceConfig['layout']) => void
 
   // --- tempo (transient — not on Session) ----------------------------------

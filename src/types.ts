@@ -7,6 +7,14 @@
  * Mode/MODES). Strict, fully typed, no `any`. See NOTICE for derivation lineage.
  */
 
+/**
+ * The portable microtuning model, vendored from mdrone (see
+ * src/vendor/tuning-core). Re-exported here so downstream modules keep importing
+ * their whole type contract from one place.
+ */
+export type { PortableTuning } from './vendor/tuning-core/model'
+import type { PortableTuning } from './vendor/tuning-core/model'
+
 /** A pitch class 0–11 (0 = C, 1 = C#/Db, ... 11 = B). */
 export type PitchClass = number
 
@@ -208,7 +216,7 @@ export interface MidiConfig {
  * boundary before dispatch; the worklet trusts the parsed shape.
  */
 export type WorkletCommand =
-  | { type: 'noteOn'; id: number; midi: number; velocity: number }
+  | { type: 'noteOn'; id: number; midi: number; velocity: number; freq?: number }
   | { type: 'noteOff'; id: number }
   | { type: 'expression'; id: number; expr: TouchExpression }
   | { type: 'setParam'; path: string; value: number }
@@ -225,6 +233,14 @@ export interface Session {
   name: string
   keyRoot: PitchClass
   mode: Mode
+  /**
+   * Optional microtuning. When absent the instrument is pure 12-TET and every
+   * note-on omits `freq` (regression-identical). When present, surface degrees
+   * index this tuning's `scaleCents` directly (arbitrary N, non-octave periods),
+   * and the resolved per-note frequency is sent to the worklet. `keyRoot`/`mode`
+   * still choose the diatonic surface layout but do not affect tuned pitch.
+   */
+  tuning?: PortableTuning
   surface: SurfaceConfig
   patch: PatchParams
   fx: FxParams

@@ -165,8 +165,11 @@ export class AudioEngine {
 
   // --- NoteSink API ------------------------------------------------------
 
-  noteOn(id: number, midi: number, velocity: number): void {
-    this.post({ type: 'noteOn', id, midi, velocity })
+  noteOn(id: number, midi: number, velocity: number, freq?: number): void {
+    // `freq`, when given, is the retuned per-note frequency resolved on the main
+    // thread; the worklet uses it verbatim instead of recomputing 12-TET from
+    // `midi`. Omitting it leaves the 12-TET path untouched.
+    this.post({ type: 'noteOn', id, midi, velocity, freq })
   }
 
   noteOff(id: number): void {

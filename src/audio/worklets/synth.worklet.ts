@@ -174,6 +174,10 @@ class Voice {
   private velocity = 1
   private currentFreq = 440
   private targetFreq = 440
+  /** MIDI note stamped at note-on; the anchor expression bends are relative to. */
+  private noteMidi = 60
+  /** Sounding frequency stamped at note-on (retuned Hz, or 12-TET midiToFreq). */
+  private noteFreq = 440
   private glideCoeff = 1 // 0..1 per-sample approach; 1 = snap
   private timbre = 0
   private pressure = 0
@@ -191,13 +195,18 @@ class Voice {
   private readonly ampEnv = new Envelope()
   private readonly filtEnv = new Envelope()
 
-  start(id: number, midi: number, velocity: number, patch: PatchParams): void {
+  start(id: number, midi: number, velocity: number, patch: PatchParams, freq?: number): void {
     this.id = id
     this.active = true
     this.startSeq = ++voiceStartCounter
     this.midi = midi
     this.velocity = clamp(velocity, 0, 1)
-    this.targetFreq = midiToFreq(midi)
+    // The surface resolves retuned scales to an absolute Hz on the main thread and
+    // sends it here; falling back to 12-TET midiToFreq keeps the default path
+    // (freq === undefined) bit-for-bit identical to before retuning existed.
+    this.noteMidi = midi
+    this.noteFreq = freq !== undefined && Number.isFinite(freq) && freq > 0 ? freq : midiToFreq(midi)
+    this.targetFreq = this.noteFreq
     // Legato/off glide only slides when a voice is already sounding; a fresh
     // voice snaps unless glide is 'always'.
     const legatoSlide = patch.glide.mode === 'always' && this.currentFreq > 0
@@ -246,8 +255,11 @@ class Voice {
 
   setExpression(expr: TouchExpression, patch: PatchParams): void {
     // expr.pitch is an absolute fractional MIDI note (glide/bend already folded
-    // in by the surface layer); glide smooths our approach to it.
-    this.targetFreq = midiToFreq(expr.pitch)
+    // in by the surface layer). We bend RELATIVE to the note-on frequency by the
+    // MIDI-semitone delta from the note-on note, so a retuned note bends/glides
+    // in equal-tempered cents around its true tuned pitch. In 12-TET (noteFreq =
+    // midiToFreq(noteMidi)) this reduces exactly to midiToFreq(expr.pitch).
+    this.targetFreq = this.noteFreq * Math.pow(2, (expr.pitch - this.noteMidi) / 12)
     this.timbre = clamp(expr.timbre, 0, 1)
     this.pressure = clamp(expr.pressure, 0, 1)
     this.setGlide(patch)
@@ -479,7 +491,7 @@ class SynthProcessor extends AudioWorkletProcessor {
   private handle(cmd: WorkletCommand): void {
     switch (cmd.type) {
       case 'noteOn':
-        this.noteOn(cmd.id, cmd.midi, cmd.velocity)
+        this.noteOn(cmd.id, cmd.midi, cmd.velocity, cmd.freq)
         break
       case 'noteOff':
         for (const v of this.voices) if (v.active && v.id === cmd.id) v.release()
@@ -502,7 +514,7 @@ class SynthProcessor extends AudioWorkletProcessor {
     }
   }
 
-  private noteOn(id: number, midi: number, velocity: number): void {
+  private noteOn(id: number, midi: number, velocity: number, freq?: number): void {
     // Reuse a voice already holding this id, else a free one, else steal the
     // oldest (lowest startSeq) so a held note isn't retriggered repeatedly.
     let voice = this.voices.find((v) => v.active && v.id === id)
@@ -511,7 +523,7 @@ class SynthProcessor extends AudioWorkletProcessor {
       voice = this.voices[0]
       for (const v of this.voices) if (v.startSeq < voice.startSeq) voice = v
     }
-    voice.start(id, midi, velocity, this.patch)
+    voice.start(id, midi, velocity, this.patch, freq)
   }
 
   /** Current LFO frequency in Hz, honouring tempo sync. */

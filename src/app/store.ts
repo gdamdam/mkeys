@@ -31,6 +31,7 @@ import type {
   Phrase,
   PhraseEvent,
   PitchClass,
+  PortableTuning,
   Session,
   TouchExpression,
 } from '../types'
@@ -44,6 +45,7 @@ import type {
 } from '../components/instrument'
 import { AudioEngine, getPreset } from '../audio'
 import { REFERENCE_OCTAVE, SCALE_TABLE, degreeToMidi, midiToNearestDegree } from '../harmony/scales'
+import { degreeOctaveToHz, freqToMidi, normalizeTuning, scaleLengthOf } from '../harmony/tuning'
 import { buildGrid, effectiveSurface } from '../surface/geometry'
 import { Scheduler, type PatternEvent, type PlannedEvent } from '../transport/scheduler'
 import { secondsPerBeat } from '../transport/clock'
@@ -83,6 +85,9 @@ const ARP_VELOCITY = 0.85
 /** Lookahead + tick for both schedulers (seconds / ms). */
 const SCHED_LOOKAHEAD = 0.12
 const SCHED_INTERVAL = 25
+
+/** 12-TET frequency of a (possibly fractional) MIDI note; A4 = 69 = 440 Hz. */
+const midiToFreqHz = (midi: number): number => 440 * Math.pow(2, (midi - 69) / 12)
 
 const clamp01 = (n: number): number => (n < 0 ? 0 : n > 1 ? 1 : n)
 const clampInt = (n: number, lo: number, hi: number): number =>
@@ -268,6 +273,7 @@ class InstrumentStore {
       latencyMs: this.engine.latencyMs(),
       setKeyRoot: this.setKeyRoot,
       setMode: this.setMode,
+      setTuning: this.setTuning,
       setLayout: this.setLayout,
       bpm: this.bpm,
       effectiveBpm: this.computeEffectiveBpm(),
@@ -392,6 +398,22 @@ class InstrumentStore {
     this.emit()
   }
 
+  /**
+   * Load a microtuning (arbitrary N, non-octave periods) or clear back to
+   * 12-TET (`null`). Changing the scale length relays the surface, and the pitch
+   * change means every sounding note must be released first.
+   */
+  setTuning = (tuning: PortableTuning | null): void => {
+    this.releaseAll()
+    const next: Session = { ...this.session }
+    if (tuning) next.tuning = normalizeTuning(tuning)
+    else delete next.tuning
+    this.session = next
+    this.rebuildGrid()
+    this.autosave()
+    this.emit()
+  }
+
   setLayout = (layout: Session['surface']['layout']): void => {
     this.releaseAll()
     this.session = { ...this.session, surface: { ...this.session.surface, layout } }
@@ -400,14 +422,38 @@ class InstrumentStore {
     this.emit()
   }
 
+  /**
+   * Steps per period of the active scale: the tuning's own length when one is
+   * loaded (so a 19-note tuning lays out 19 columns per octave), else the
+   * diatonic mode's length. The surface geometry is built against this.
+   */
+  private scaleLen(): number {
+    const t = this.session.tuning
+    return t ? scaleLengthOf(t) : SCALE_TABLE[this.session.mode].length
+  }
+
+  /**
+   * Resolve a surface (degree, octave) to the note-on pitch. Without a tuning
+   * this is the plain 12-TET MIDI note and no `freq` (worklet stays 12-TET —
+   * regression-identical). With a tuning, `freq` is the resolved Hz and `midi`
+   * its fractional 12-TET anchor (freqToMidi), which keeps the expression /
+   * glide / MIDI machinery — all MIDI-space — consistent with the sounding
+   * pitch: a bend of one MIDI semitone is one semitone around the tuned note.
+   */
+  private resolvePitch(degree: number, octave: number): { midi: number; freq?: number } {
+    const t = this.session.tuning
+    if (!t) {
+      return { midi: degreeToMidi(degree, this.session.keyRoot, this.session.mode, octave) }
+    }
+    const freq = degreeOctaveToHz(t, degree, octave)
+    return { midi: freqToMidi(freq), freq }
+  }
+
   private rebuildGrid(): void {
-    const scaleLen = SCALE_TABLE[this.session.mode].length
-    const coords = buildGrid(effectiveSurface(this.session.surface), scaleLen)
-    const root = this.session.keyRoot
-    const mode = this.session.mode
+    const coords = buildGrid(effectiveSurface(this.session.surface), this.scaleLen())
     this.grid = coords.map((row) =>
       row.map((c): GridCell => {
-        const midi = degreeToMidi(c.degree, root, mode, c.octave)
+        const { midi } = this.resolvePitch(c.degree, c.octave)
         return {
           degree: c.degree,
           octave: c.octave,
@@ -555,7 +601,7 @@ class InstrumentStore {
     opts?: { bypassLatch?: boolean },
   ): number => {
     void this.ensureStarted()
-    const { baseMidi, midis } = this.chordMidis(indexInScale, octave)
+    const { baseMidi, midis, freqs } = this.chordMidis(indexInScale, octave)
 
     // Latch toggle: re-pressing a latched-but-released note turns it off. Phrase
     // playback bypasses this so a looped note never toggles a held latch note.
@@ -588,10 +634,11 @@ class InstrumentStore {
       this.voices.set(id, rec)
       this.rebuildArp()
     } else {
-      for (const m of midis) {
+      for (let i = 0; i < midis.length; i++) {
+        const m = midis[i]
         const eid = this.nextEngineId++
         rec.engineIds.push(eid)
-        this.engine.noteOn(eid, m, vel)
+        this.engine.noteOn(eid, m, vel, freqs?.[i])
         this.engine.setExpression(eid, this.exprForNote(expr, m, baseMidi))
         this.midiSendNoteOn(eid, m, vel)
       }
@@ -668,11 +715,17 @@ class InstrumentStore {
     this.phraseVoiceIds.clear()
   }
 
-  private chordMidis(indexInScale: number, octave: number): { baseMidi: number; midis: number[] } {
-    const scaleLen = SCALE_TABLE[this.session.mode].length
-    const degrees = chordDegrees(indexInScale, this.session.chordMode, scaleLen)
-    const midis = degrees.map((d) => degreeToMidi(d, this.session.keyRoot, this.session.mode, octave))
-    return { baseMidi: midis[0], midis }
+  private chordMidis(
+    indexInScale: number,
+    octave: number,
+  ): { baseMidi: number; midis: number[]; freqs?: number[] } {
+    const degrees = chordDegrees(indexInScale, this.session.chordMode, this.scaleLen())
+    const resolved = degrees.map((d) => this.resolvePitch(d, octave))
+    const midis = resolved.map((r) => r.midi)
+    // Only carry frequencies when a tuning is active; otherwise the worklet
+    // stays on its 12-TET midiToFreq path.
+    const freqs = this.session.tuning ? resolved.map((r) => r.freq as number) : undefined
+    return { baseMidi: midis[0], midis, freqs }
   }
 
   /** Offset a touch's absolute pitch so a stacked chord note glides in parallel. */
@@ -733,10 +786,14 @@ class InstrumentStore {
   }
 
   private onArpEvents(events: PlannedEvent[]): void {
+    // Under a tuning the arp's note numbers are fractional 12-TET anchors that
+    // losslessly encode the tuned Hz, so recover the frequency from them.
+    const tuned = this.session.tuning != null
     for (const ev of events) {
       const eid = this.nextEngineId++
+      const freq = tuned ? midiToFreqHz(ev.note) : undefined
       this.scheduleArpAt(ev.time, () => {
-        this.engine.noteOn(eid, ev.note, ev.velocity)
+        this.engine.noteOn(eid, ev.note, ev.velocity, freq)
         this.midiSendNoteOn(eid, ev.note, ev.velocity)
         this.arpLive.add(eid)
       })
@@ -886,7 +943,9 @@ class InstrumentStore {
       const dur = offBeat !== null ? Math.max(0.05, offBeat - on.time) : 0.5
       const idx = table.length
       const expr: TouchExpression = on.expression ?? {
-        pitch: degreeToMidi(on.degree, this.session.keyRoot, this.session.mode, on.octave),
+        // Anchor the default expression at the resolved note pitch (tuned or
+        // 12-TET) so noteOnAt's initial bend offset is zero and playback is in tune.
+        pitch: this.resolvePitch(on.degree, on.octave).midi,
         glide: 0,
         timbre: 0.5,
         pressure: DEFAULT_VELOCITY,
