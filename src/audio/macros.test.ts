@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Macros } from '../types'
-import { applyMacros } from './macros'
+import { defaultSession } from '../persistence/session'
+import { applyMacros, composeMacros } from './macros'
 
 /** Build a Macros with all knobs at `v` unless overridden. */
 function m(v: number, over: Partial<Macros> = {}): Macros {
@@ -9,109 +10,79 @@ function m(v: number, over: Partial<Macros> = {}): Macros {
 
 const SAMPLES = [0, 0.25, 0.5, 0.75, 1]
 
-describe('applyMacros — validity', () => {
-  it('keeps every output within its type range for all-macro sweeps', () => {
+/** A complete, valid base patch/fx to layer macro offsets onto. */
+function base(): { patch: ReturnType<typeof defaultSession>['patch']; fx: ReturnType<typeof defaultSession>['fx'] } {
+  const s = defaultSession()
+  return { patch: s.patch, fx: s.fx }
+}
+
+describe('applyMacros — offsets', () => {
+  it('is all-zero when every macro is 0, so neutral macros are a no-op', () => {
+    expect(applyMacros(m(0))).toEqual({
+      filter: { cutoff: 0, resonance: 0, drive: 0 },
+      lfo: { rate: 0, depth: 0 },
+      subLevel: 0,
+      fx: { drive: 0, chorus: 0 },
+      delay: { feedback: 0, mix: 0 },
+      reverb: { size: 0, mix: 0 },
+    })
+  })
+
+  it('keeps every offset non-negative and 0..1-bounded (cutoff/rate in Hz) for all sweeps', () => {
     for (const v of SAMPLES) {
-      const { patch, fx } = applyMacros(m(v))
-
-      // patch.filter
-      const f = patch.filter!
-      expect(f.cutoff).toBeGreaterThanOrEqual(20)
-      expect(f.cutoff).toBeLessThanOrEqual(20000)
-      expect(f.resonance).toBeGreaterThanOrEqual(0)
-      expect(f.resonance).toBeLessThanOrEqual(1)
-      expect(f.drive).toBeGreaterThanOrEqual(0)
-      expect(f.drive).toBeLessThanOrEqual(1)
-      expect(f.envAmount).toBeGreaterThanOrEqual(-1)
-      expect(f.envAmount).toBeLessThanOrEqual(1)
-      expect(f.keytrack).toBeGreaterThanOrEqual(0)
-      expect(f.keytrack).toBeLessThanOrEqual(1)
-
-      // patch.lfo
-      const l = patch.lfo!
-      expect(l.rate).toBeGreaterThanOrEqual(0)
-      expect(l.rate).toBeLessThanOrEqual(50)
-      expect(l.depth).toBeGreaterThanOrEqual(0)
-      expect(l.depth).toBeLessThanOrEqual(1)
-
-      // patch.subLevel
-      expect(patch.subLevel!).toBeGreaterThanOrEqual(0)
-      expect(patch.subLevel!).toBeLessThanOrEqual(1)
-
-      // fx scalars
-      expect(fx.drive!).toBeGreaterThanOrEqual(0)
-      expect(fx.drive!).toBeLessThanOrEqual(1)
-      expect(fx.chorus!).toBeGreaterThanOrEqual(0)
-      expect(fx.chorus!).toBeLessThanOrEqual(1)
-
-      // fx.delay
-      const d = fx.delay!
-      expect(d.time).toBeGreaterThanOrEqual(0)
-      expect(d.time).toBeLessThanOrEqual(10)
-      expect(d.feedback).toBeGreaterThanOrEqual(0)
-      expect(d.feedback).toBeLessThanOrEqual(1)
-      expect(d.mix).toBeGreaterThanOrEqual(0)
-      expect(d.mix).toBeLessThanOrEqual(1)
-      expect(Number.isInteger(d.division)).toBe(true)
-      expect(d.division).toBeGreaterThanOrEqual(1)
-      expect(d.division).toBeLessThanOrEqual(64)
-
-      // fx.reverb
-      const r = fx.reverb!
-      expect(r.size).toBeGreaterThanOrEqual(0)
-      expect(r.size).toBeLessThanOrEqual(1)
-      expect(r.mix).toBeGreaterThanOrEqual(0)
-      expect(r.mix).toBeLessThanOrEqual(1)
+      const o = applyMacros(m(v))
+      for (const x of [
+        o.filter.resonance, o.filter.drive, o.lfo.depth, o.subLevel,
+        o.fx.drive, o.fx.chorus, o.delay.feedback, o.delay.mix, o.reverb.size, o.reverb.mix,
+      ]) {
+        expect(x).toBeGreaterThanOrEqual(0)
+        expect(x).toBeLessThanOrEqual(1)
+      }
+      expect(o.filter.cutoff).toBeGreaterThanOrEqual(0)
+      expect(o.lfo.rate).toBeGreaterThanOrEqual(0)
     }
   })
 
   it('clamps out-of-range macro inputs instead of leaking them', () => {
-    const { patch, fx } = applyMacros({ glow: -5, motion: 9, air: -1, grit: 100 })
-    expect(patch.subLevel!).toBeGreaterThanOrEqual(0)
-    expect(patch.subLevel!).toBeLessThanOrEqual(1)
-    expect(fx.drive!).toBeLessThanOrEqual(1)
-    expect(fx.chorus!).toBeLessThanOrEqual(1)
-    expect(patch.filter!.resonance).toBeLessThanOrEqual(1)
-    expect(patch.filter!.cutoff).toBeLessThanOrEqual(20000)
-    // Negative macros clamp to the zero end, not below.
-    expect(patch.filter!.resonance).toBeGreaterThanOrEqual(0)
-    expect(fx.reverb!.mix).toBeGreaterThanOrEqual(0)
+    const o = applyMacros({ glow: -5, motion: 9, air: -1, grit: 100 })
+    expect(o.filter.resonance).toBeCloseTo(0.7) // grit clamps to 1
+    expect(o.fx.drive).toBeCloseTo(0.8)
+    expect(o.reverb.mix).toBe(0) // air clamps to 0
+    expect(o.subLevel).toBe(0) // glow clamps to 0
   })
 })
 
 describe('applyMacros — monotonicity', () => {
-  /** Sweep one macro (others at 0) and read a scalar off the result. */
-  function sweep(knob: keyof Macros, read: (r: ReturnType<typeof applyMacros>) => number): number[] {
+  function sweep(knob: keyof Macros, read: (o: ReturnType<typeof applyMacros>) => number): number[] {
     return SAMPLES.map((v) => read(applyMacros(m(0, { [knob]: v }))))
   }
-
   function assertIncreasing(xs: number[]): void {
     for (let i = 1; i < xs.length; i++) expect(xs[i]).toBeGreaterThan(xs[i - 1])
   }
 
   it('Glow raises warmth: subLevel, reverb size, cutoff', () => {
-    assertIncreasing(sweep('glow', (r) => r.patch.subLevel!))
-    assertIncreasing(sweep('glow', (r) => r.fx.reverb!.size))
-    assertIncreasing(sweep('glow', (r) => r.patch.filter!.cutoff))
+    assertIncreasing(sweep('glow', (o) => o.subLevel))
+    assertIncreasing(sweep('glow', (o) => o.reverb.size))
+    assertIncreasing(sweep('glow', (o) => o.filter.cutoff))
   })
 
   it('Motion raises movement: lfo rate/depth, chorus, delay mix/feedback', () => {
-    assertIncreasing(sweep('motion', (r) => r.patch.lfo!.rate))
-    assertIncreasing(sweep('motion', (r) => r.patch.lfo!.depth))
-    assertIncreasing(sweep('motion', (r) => r.fx.chorus!))
-    assertIncreasing(sweep('motion', (r) => r.fx.delay!.mix))
-    assertIncreasing(sweep('motion', (r) => r.fx.delay!.feedback))
+    assertIncreasing(sweep('motion', (o) => o.lfo.rate))
+    assertIncreasing(sweep('motion', (o) => o.lfo.depth))
+    assertIncreasing(sweep('motion', (o) => o.fx.chorus))
+    assertIncreasing(sweep('motion', (o) => o.delay.mix))
+    assertIncreasing(sweep('motion', (o) => o.delay.feedback))
   })
 
   it('Air raises high-end/space: cutoff and reverb mix', () => {
-    assertIncreasing(sweep('air', (r) => r.patch.filter!.cutoff))
-    assertIncreasing(sweep('air', (r) => r.fx.reverb!.mix))
+    assertIncreasing(sweep('air', (o) => o.filter.cutoff))
+    assertIncreasing(sweep('air', (o) => o.reverb.mix))
   })
 
   it('Grit raises dirt: fx drive, filter resonance and filter drive', () => {
-    assertIncreasing(sweep('grit', (r) => r.fx.drive!))
-    assertIncreasing(sweep('grit', (r) => r.patch.filter!.resonance))
-    assertIncreasing(sweep('grit', (r) => r.patch.filter!.drive))
+    assertIncreasing(sweep('grit', (o) => o.fx.drive))
+    assertIncreasing(sweep('grit', (o) => o.filter.resonance))
+    assertIncreasing(sweep('grit', (o) => o.filter.drive))
   })
 })
 
@@ -129,10 +100,50 @@ describe('applyMacros — determinism & independence', () => {
   })
 
   it('leaves reverb mix untouched by Glow and reverb size untouched by Air', () => {
-    // Glow drives size, Air drives mix — they are independent axes.
-    const onlyGlow = applyMacros(m(0, { glow: 1 }))
-    const onlyAir = applyMacros(m(0, { air: 1 }))
-    expect(onlyGlow.fx.reverb!.mix).toBe(0)
-    expect(onlyAir.fx.reverb!.size).toBe(applyMacros(m(0)).fx.reverb!.size)
+    expect(applyMacros(m(0, { glow: 1 })).reverb.mix).toBe(0)
+    expect(applyMacros(m(0, { air: 1 })).reverb.size).toBe(0)
+  })
+})
+
+describe('composeMacros — additive layering', () => {
+  it('neutral macros return the base patch/fx unchanged', () => {
+    const b = base()
+    const c = composeMacros(b, m(0))
+    expect(c.patch).toEqual(b.patch)
+    expect(c.fx).toEqual(b.fx)
+  })
+
+  it('adds the macro offset on top of the base — a manual edit stays audible', () => {
+    const b = base()
+    // Glow=1 adds +2200 Hz to whatever the base cutoff is.
+    expect(composeMacros(b, m(0, { glow: 1 })).patch.filter.cutoff).toBeCloseTo(
+      b.patch.filter.cutoff + 2200,
+    )
+    // A manually edited base cutoff is not clobbered: it sums with the macro.
+    const edited = { patch: { ...b.patch, filter: { ...b.patch.filter, cutoff: 1000 } }, fx: b.fx }
+    expect(composeMacros(edited, m(0, { glow: 1 })).patch.filter.cutoff).toBeCloseTo(3200)
+  })
+
+  it('clamps the composed value to the field range', () => {
+    const b = base()
+    const hotCutoff = { patch: { ...b.patch, filter: { ...b.patch.filter, cutoff: 19000 } }, fx: b.fx }
+    expect(composeMacros(hotCutoff, m(1)).patch.filter.cutoff).toBeLessThanOrEqual(20000)
+    const hotDrive = { patch: b.patch, fx: { ...b.fx, drive: 0.9 } }
+    expect(composeMacros(hotDrive, m(0, { grit: 1 })).fx.drive).toBe(1)
+  })
+
+  it('leaves fields no macro expresses untouched (envAmount, lfo.target, delay.time)', () => {
+    const b = base()
+    const c = composeMacros(b, m(1))
+    expect(c.patch.filter.envAmount).toBe(b.patch.filter.envAmount)
+    expect(c.patch.lfo.target).toBe(b.patch.lfo.target)
+    expect(c.fx.delay.time).toBe(b.fx.delay.time)
+  })
+
+  it('does not mutate the base patch/fx', () => {
+    const b = base()
+    const snapshot = JSON.parse(JSON.stringify(b))
+    composeMacros(b, m(1))
+    expect(b).toEqual(snapshot)
   })
 })

@@ -23,7 +23,7 @@ import type {
   WorkletCommand,
 } from '../types'
 import { FxChain } from './fx'
-import { applyMacros } from './macros'
+import { composeMacros } from './macros'
 import { MasterRecorder } from './recorder'
 import recorderWorkletUrl from './worklets/recorder.worklet?worker&url'
 import synthWorkletUrl from './worklets/synth.worklet?worker&url'
@@ -67,10 +67,13 @@ export class AudioEngine {
   /** In-flight start, shared by concurrent callers so only one graph is built. */
   private startPromise: Promise<void> | null = null
 
-  // Authoritative main-thread mirror of patch/fx, so macro merges and setParam
-  // layer onto a known-complete base.
+  // Authoritative main-thread mirror of the *base* patch/fx (what the direct
+  // controls edit). The macros are an additive layer composed on top at push
+  // time via {@link composeMacros}, never folded into this base — so a manual
+  // edit and a macro move both survive and stay audible.
   private patch: PatchParams = defaultPatch()
   private fxState: FxParams = defaultFx()
+  private macros: Macros = { glow: 0, motion: 0, air: 0, grit: 0 }
   private bpm = 120
   // Mirrored so a (re)start applies the current levels to the fresh graph.
   private masterVolumeState = 1
@@ -141,10 +144,9 @@ export class AudioEngine {
     this.recorder = new MasterRecorder(ctx, master)
     this.running = true
 
-    // Push the current mirrored state into the fresh graph.
-    this.post({ type: 'setPatch', patch: this.patch })
+    // Push the current mirrored state (base composed with macros) into the graph.
+    this.pushSound()
     this.post({ type: 'setTempo', bpm: this.bpm })
-    fx.setParams(this.fxState)
     fx.setTempo(this.bpm)
   }
 
@@ -164,22 +166,22 @@ export class AudioEngine {
 
   // --- Parameter API -----------------------------------------------------
 
-  /** Replace the whole patch (e.g. loading a preset). */
+  /** Replace the whole base patch (e.g. loading a preset). */
   setPatch(patch: PatchParams): void {
     this.patch = patch
-    this.post({ type: 'setPatch', patch })
+    this.pushSound()
   }
 
-  /** Set one dotted patch field (e.g. 'filter.cutoff'); keeps the mirror in sync. */
+  /** Set one dotted base-patch field (e.g. 'filter.cutoff'); recomposes macros. */
   setParam(path: string, value: number): void {
     applyDottedParam(this.patch, path, value)
-    this.post({ type: 'setParam', path, value })
+    this.pushSound()
   }
 
-  /** Replace the master-FX state. */
+  /** Replace the base master-FX state. */
   setFx(fx: FxParams): void {
     this.fxState = fx
-    this.fx?.setParams(fx)
+    this.pushSound()
   }
 
   /** Master output level (0..1). Smoothed so it never zippers. */
@@ -197,15 +199,20 @@ export class AudioEngine {
   }
 
   /**
-   * Apply the four performance macros: derive patch/fx overrides, shallow-merge
-   * them onto the current mirrored state, and push the merged result.
+   * Set the four performance macros. They are an additive layer, composed onto
+   * the base patch/fx at push time — the base is left intact, so direct-control
+   * edits are never clobbered.
    */
   setMacros(macros: Macros): void {
-    const { patch, fx } = applyMacros(macros)
-    this.patch = { ...this.patch, ...patch }
-    this.fxState = { ...this.fxState, ...fx }
-    this.post({ type: 'setPatch', patch: this.patch })
-    this.fx?.setParams(this.fxState)
+    this.macros = macros
+    this.pushSound()
+  }
+
+  /** Compose the base patch/fx with the active macro offsets and push to the graph. */
+  private pushSound(): void {
+    const { patch, fx } = composeMacros({ patch: this.patch, fx: this.fxState }, this.macros)
+    this.post({ type: 'setPatch', patch })
+    this.fx?.setParams(fx)
   }
 
   /** Update tempo for both the synced delay (FxChain) and the synced LFO (worklet). */

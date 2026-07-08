@@ -22,8 +22,12 @@
 
 import type { OscillatorParams, PatchParams, TouchExpression, WorkletCommand } from '../../types'
 
-/** Maximum simultaneously sounding voices; the oldest is stolen past this. */
-const MAX_VOICES = 16
+/**
+ * Maximum simultaneously sounding voices; the oldest is stolen past this.
+ * 24 = the 8 surface touches × the 3 notes of the widest chord mode (triad),
+ * so eight fingers of triads stay fully polyphonic before any stealing.
+ */
+const MAX_VOICES = 24
 /** Maximum unison stack, matching UnisonParams.voices upper bound. */
 const MAX_UNISON = 8
 /** Frames in one render quantum. */

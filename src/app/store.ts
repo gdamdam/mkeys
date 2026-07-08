@@ -199,6 +199,11 @@ class InstrumentStore {
   private nextVoiceId = 1
   private nextEngineId = 1
   private readonly pending = new Set<ReturnType<typeof setTimeout>>()
+  // Arp timers/notes are tracked apart from `pending` so stopping the arp can
+  // cancel its still-scheduled note-ons and silence its sounding notes without
+  // touching phrase playback.
+  private readonly arpPending = new Set<ReturnType<typeof setTimeout>>()
+  private readonly arpLive = new Set<number>()
 
   // --- phrase playback ---
   private phraseTable: PhraseMeta[] = []
@@ -499,11 +504,26 @@ class InstrumentStore {
   // ------------------------------------------------------------------ performance
 
   setArp = (arp: ArpConfig): void => {
+    const wasEnabled = this.session.arp.enabled
     this.session = { ...this.session, arp }
     if (arp.enabled) {
+      // Fold any directly-sounding notes into the arp so they don't drone on
+      // alongside the sequence when it turns on.
+      if (!wasEnabled) {
+        for (const v of this.voices.values()) {
+          if (!v.arp) {
+            for (const eid of v.engineIds) {
+              this.engine.noteOff(eid)
+              this.midiSendNoteOff(eid)
+            }
+            v.engineIds = []
+            v.arp = true
+          }
+        }
+      }
       this.rebuildArp()
     } else {
-      this.arpScheduler.stop()
+      this.stopArp()
       for (const [id, v] of [...this.voices]) if (v.arp) this.voices.delete(id)
     }
     this.autosave()
@@ -527,12 +547,18 @@ class InstrumentStore {
 
   // ------------------------------------------------------------------ note routing
 
-  noteOnAt = (indexInScale: number, octave: number, expr: TouchExpression): number => {
+  noteOnAt = (
+    indexInScale: number,
+    octave: number,
+    expr: TouchExpression,
+    opts?: { bypassLatch?: boolean },
+  ): number => {
     void this.ensureStarted()
     const { baseMidi, midis } = this.chordMidis(indexInScale, octave)
 
-    // Latch toggle: re-pressing a latched-but-released note turns it off.
-    if (this.latchOn) {
+    // Latch toggle: re-pressing a latched-but-released note turns it off. Phrase
+    // playback bypasses this so a looped note never toggles a held latch note.
+    if (this.latchOn && !opts?.bypassLatch) {
       for (const [id, v] of this.voices) {
         if (!v.fingerDown && v.baseMidi === baseMidi) {
           this.releaseVoice(id)
@@ -634,7 +660,7 @@ class InstrumentStore {
     }
     this.voices.clear()
     this.clearPending()
-    this.arpScheduler.stop()
+    this.stopArp()
     this.engine.panic()
     this.midiPanic()
     this.midiInVoices.clear()
@@ -681,16 +707,14 @@ class InstrumentStore {
   }
 
   private rebuildArp(): void {
+    // Fully reset first: cancel any note-ons still scheduled from the previous
+    // sequence and silence its sounding notes, so a rebuild never leaves stale
+    // or hung arp notes behind.
+    this.stopArp()
     const arp = this.session.arp
-    if (!arp.enabled) {
-      this.arpScheduler.stop()
-      return
-    }
+    if (!arp.enabled) return
     const midis = this.arpMidis()
-    if (midis.length === 0) {
-      this.arpScheduler.stop()
-      return
-    }
+    if (midis.length === 0) return
     const seq = generateArpSequence(midis, arp, ARP_SEED)
     const stepBeats = BEATS_PER_BAR / Math.max(1, arp.division)
     const gate = Math.min(1, Math.max(0.05, arp.gate))
@@ -710,15 +734,39 @@ class InstrumentStore {
   private onArpEvents(events: PlannedEvent[]): void {
     for (const ev of events) {
       const eid = this.nextEngineId++
-      this.scheduleAt(ev.time, () => {
+      this.scheduleArpAt(ev.time, () => {
         this.engine.noteOn(eid, ev.note, ev.velocity)
         this.midiSendNoteOn(eid, ev.note, ev.velocity)
+        this.arpLive.add(eid)
       })
-      this.scheduleAt(ev.offTime, () => {
+      this.scheduleArpAt(ev.offTime, () => {
         this.engine.noteOff(eid)
         this.midiSendNoteOff(eid)
+        this.arpLive.delete(eid)
       })
     }
+  }
+
+  /** Like {@link scheduleAt} but tracked in `arpPending` so `stopArp` can cancel it. */
+  private scheduleArpAt(timeSec: number, fn: () => void): void {
+    const delayMs = Math.max(0, (timeSec - this.ctxNow()) * 1000)
+    const h = setTimeout(() => {
+      this.arpPending.delete(h)
+      fn()
+    }, delayMs)
+    this.arpPending.add(h)
+  }
+
+  /** Stop the arp cleanly: no future note fires, no sounding note is left hung. */
+  private stopArp(): void {
+    this.arpScheduler.stop()
+    for (const h of this.arpPending) clearTimeout(h)
+    this.arpPending.clear()
+    for (const eid of this.arpLive) {
+      this.engine.noteOff(eid)
+      this.midiSendNoteOff(eid)
+    }
+    this.arpLive.clear()
   }
 
   // ------------------------------------------------------------------ phrase recorder
@@ -863,13 +911,16 @@ class InstrumentStore {
       if (!meta) continue
       const holder = { id: -1 }
       this.scheduleAt(ev.time, () => {
-        holder.id = this.noteOnAt(meta.degree, meta.octave, meta.expr)
+        holder.id = this.noteOnAt(meta.degree, meta.octave, meta.expr, { bypassLatch: true })
         this.phraseVoiceIds.add(holder.id)
       })
       this.scheduleAt(ev.offTime, () => {
         if (holder.id >= 0) {
-          this.noteOffVoice(holder.id)
+          // Release directly (not noteOffVoice): phrase notes must always end,
+          // even with latch on, so a loop replays instead of accumulating.
+          this.releaseVoice(holder.id)
           this.phraseVoiceIds.delete(holder.id)
+          this.emit()
         }
       })
     }
