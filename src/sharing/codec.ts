@@ -289,7 +289,7 @@ function sanitizeLfo(raw: unknown, fb: LfoParams): LfoParams {
 function sanitizeUnison(raw: unknown, fb: UnisonParams): UnisonParams {
   const r = isRecord(raw) ? raw : {}
   return {
-    voices: int(r.voices, 1, 16, fb.voices),
+    voices: int(r.voices, 1, 8, fb.voices),
     detune: num(r.detune, 0, 1, fb.detune),
     spread: num(r.spread, 0, 1, fb.spread),
   }
@@ -382,7 +382,7 @@ function sanitizeArp(raw: unknown, fb: ArpConfig): ArpConfig {
     division: num(r.division, 1, 64, fb.division),
     gate: num(r.gate, 0, 1, fb.gate),
     swing: num(r.swing, 0, 1, fb.swing),
-    octaves: int(r.octaves, 0, 8, fb.octaves),
+    octaves: int(r.octaves, 1, 4, fb.octaves),
   }
 }
 

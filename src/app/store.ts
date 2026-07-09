@@ -1109,9 +1109,15 @@ class InstrumentStore {
     if (!ev) return
     switch (ev.type) {
       case 'noteOn': {
+        // A repeated note-on for a still-held note (chatty controller or a
+        // dropped note-off) would otherwise orphan the previous voice.
+        const held = this.midiInVoices.get(ev.note)
+        if (held !== undefined) this.noteOffVoice(held)
         const { index, octave } = this.midiToCell(ev.note)
         const vId = this.noteOnAt(index, octave, {
-          pitch: ev.note,
+          // Anchor to the cell's resolved (micro)tuned pitch, not the raw
+          // incoming note, so MIDI-in follows the active tuning like touch.
+          pitch: this.resolvePitch(index, octave).midi,
           glide: 0,
           timbre: this.midiMod,
           pressure: ev.velocity / 127,
@@ -1158,11 +1164,12 @@ class InstrumentStore {
 
   /** Fold the latest pitch-bend + mod-wheel into every MIDI-input voice. */
   private applyMidiExpression(): void {
-    for (const [note, vId] of this.midiInVoices) {
+    for (const vId of this.midiInVoices.values()) {
       const v = this.voices.get(vId)
       if (!v) continue
       this.moveVoice(vId, {
-        pitch: note + this.midiBend * 2,
+        // Bend rides on the voice's tuned base pitch, not the raw MIDI note.
+        pitch: v.baseMidi + this.midiBend * 2,
         glide: 0,
         timbre: this.midiMod,
         pressure: v.expr.pressure,
