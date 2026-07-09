@@ -17,6 +17,7 @@ import type {
   FilterParams,
   FxParams,
   GlideParams,
+  KeyboardMap,
   LfoParams,
   Macros,
   MidiConfig,
@@ -366,6 +367,9 @@ export function sanitizeSession(raw: unknown): Session {
   }
   const tuning = sanitizeTuning(prop(raw, 'tuning'))
   if (tuning) s.tuning = tuning
+  // The MIDI-in keyboard map only makes sense alongside a tuning (§3-A).
+  const keyboardMap = tuning ? sanitizeKeyboardMap(prop(raw, 'keyboardMap')) : undefined
+  if (keyboardMap) s.keyboardMap = keyboardMap
   const presetName = prop(raw, 'presetName')
   if (typeof presetName === 'string') s.presetName = presetName
   return s
@@ -374,6 +378,17 @@ export function sanitizeSession(raw: unknown): Session {
 /** Accept a tuning only if it is a valid PortableTuning; else undefined (12-TET). */
 function sanitizeTuning(raw: unknown): PortableTuning | undefined {
   return isValidTuning(raw) ? normalizeTuning(raw) : undefined
+}
+
+/** Accept a `.kbm` keyboard map (refNote + integer degree list); else undefined. */
+function sanitizeKeyboardMap(raw: unknown): KeyboardMap | undefined {
+  if (!isObject(raw)) return undefined
+  const refNote = prop(raw, 'refNote')
+  const degrees = prop(raw, 'degrees')
+  if (typeof refNote !== 'number' || !Number.isFinite(refNote)) return undefined
+  if (!Array.isArray(degrees) || degrees.length === 0) return undefined
+  const clean = degrees.map((d) => (typeof d === 'number' && Number.isInteger(d) ? d : -1))
+  return { refNote: Math.trunc(refNote), degrees: clean }
 }
 
 /**

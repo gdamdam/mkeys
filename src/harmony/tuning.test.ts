@@ -4,6 +4,7 @@ import {
   freqToMidi,
   importSclText,
   isValidTuning,
+  midiToTunedCell,
   refFreqFromKbmText,
   scaleLengthOf,
 } from './tuning'
@@ -97,5 +98,45 @@ describe('freqToMidi', () => {
   it('inverts midiToFreq', () => {
     expect(freqToMidi(440)).toBeCloseTo(69, 9)
     expect(freqToMidi(midiToFreq(60))).toBeCloseTo(60, 9)
+  })
+})
+
+describe('midiToTunedCell (§3-A MIDI-in mapping)', () => {
+  it('anchors the tonic at MIDI 60 for a 12-note tuning (keyRoot C)', () => {
+    const tet = edo(12)
+    const cell = midiToTunedCell(60, 0, tet)
+    expect(cell).toEqual({ index: 0, octave: 4 }) // C4 → degree 0, reference octave
+  })
+
+  it('reaches all 19 degrees of a 19-note tuning across MIDI 60‥78', () => {
+    const t = edo(19)
+    const cells = Array.from({ length: 19 }, (_, i) => midiToTunedCell(60 + i, 0, t)!)
+    const indices = cells.map((c) => c.index)
+    // 19 consecutive notes → 19 distinct degrees, all in the reference octave.
+    expect(new Set(indices).size).toBe(19)
+    expect(indices).toEqual(Array.from({ length: 19 }, (_, i) => i))
+    expect(cells.every((c) => c.octave === 4)).toBe(true)
+    // The 20th note rolls into the next octave register at degree 0.
+    expect(midiToTunedCell(79, 0, t)).toEqual({ index: 0, octave: 5 })
+  })
+
+  it('honors a .kbm keyboard map when present', () => {
+    const t = edo(12)
+    // A whole-tone keyboard map: 6 keys per period hitting even degrees,
+    // refNote 60 → degree 0. Key 60→0, 61→2, 62→4, 63→6, 64→8, 65→10, 66→0(+1oct).
+    const kbm = { refNote: 60, degrees: [0, 2, 4, 6, 8, 10] }
+    expect(midiToTunedCell(60, 0, t, kbm)).toEqual({ index: 0, octave: 4 })
+    expect(midiToTunedCell(62, 0, t, kbm)).toEqual({ index: 4, octave: 4 })
+    expect(midiToTunedCell(65, 0, t, kbm)).toEqual({ index: 10, octave: 4 })
+    expect(midiToTunedCell(66, 0, t, kbm)).toEqual({ index: 0, octave: 5 })
+    // The map overrides the linear default: note 61 → degree 2, not degree 1.
+    expect(midiToTunedCell(61, 0, t, kbm)!.index).toBe(2)
+  })
+
+  it('returns null for a key a .kbm leaves unmapped', () => {
+    const t = edo(12)
+    const kbm = { refNote: 60, degrees: [0, -1, 2, -1, 4, -1] }
+    expect(midiToTunedCell(61, 0, t, kbm)).toBeNull()
+    expect(midiToTunedCell(60, 0, t, kbm)).toEqual({ index: 0, octave: 4 })
   })
 })

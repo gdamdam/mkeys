@@ -23,11 +23,51 @@ function decodeWire(encoded: string): string {
   return decodeURIComponent(escape(atob(padded)))
 }
 
+import { sanitizeSession as persistSanitize } from '../persistence/session'
+
 /** A fully-populated, already-canonical session for exact round-trip assertions. */
 function makeSession(overrides: Partial<Session> = {}): Session {
   const base = createDefaultSession()
   return sanitizeSession({ ...base, ...overrides })
 }
+
+describe('share ↔ save bound parity (§4)', () => {
+  // The share codec and the persistence sanitizer must agree on arp/unison
+  // bounds, or a share→save→reload silently rewrites values. These lock the
+  // two sanitizers to the same fixpoint.
+  it('preserves arp + unison values across share→save→reload', () => {
+    const s = makeSession()
+    s.arp = { ...s.arp, enabled: true, division: 8, octaves: 3 }
+    s.patch.unison = { voices: 6, detune: 0.4, spread: 0.7 }
+    const canonical = sanitizeSession(s)
+
+    const shared = decodeSession(encodeSession(canonical))! // share round-trip
+    const reloaded = persistSanitize(shared) // save + reload
+
+    expect(shared.arp).toEqual(canonical.arp)
+    expect(shared.patch.unison).toEqual(canonical.patch.unison)
+    expect(reloaded.arp).toEqual(canonical.arp)
+    expect(reloaded.patch.unison).toEqual(canonical.patch.unison)
+  })
+
+  it('arp.division is an integer in BOTH sanitizers (no fractional drift)', () => {
+    // A hand-crafted payload with a fractional division must land on the same
+    // integer through the share codec and the persistence path — not survive
+    // the share only to be rounded on the next save.
+    const raw = { ...createDefaultSession(), arp: { ...createDefaultSession().arp, division: 8.5 } }
+    const shared = sanitizeSession(raw)
+    const saved = persistSanitize(raw)
+    expect(Number.isInteger(shared.arp.division)).toBe(true)
+    expect(shared.arp.division).toBe(saved.arp.division)
+  })
+
+  it('unison.voices caps at 8 (the worklet limit) in both sanitizers', () => {
+    const raw = { ...createDefaultSession() }
+    raw.patch = { ...raw.patch, unison: { voices: 99, detune: 0.5, spread: 0.5 } }
+    expect(sanitizeSession(raw).patch.unison.voices).toBe(8)
+    expect(persistSanitize(raw).patch.unison.voices).toBe(8)
+  })
+})
 
 describe('encodeSession / decodeSession round-trip', () => {
   it('preserves every field of a canonical default session', () => {

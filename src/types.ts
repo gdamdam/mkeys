@@ -14,6 +14,8 @@
  */
 export type { PortableTuning } from './vendor/tuning-core/model'
 import type { PortableTuning } from './vendor/tuning-core/model'
+export type { KeyboardMap } from './harmony/tuning'
+import type { KeyboardMap } from './harmony/tuning'
 
 /** A pitch class 0–11 (0 = C, 1 = C#/Db, ... 11 = B). */
 export type PitchClass = number
@@ -241,6 +243,12 @@ export interface Session {
    * still choose the diatonic surface layout but do not affect tuned pitch.
    */
   tuning?: PortableTuning
+  /**
+   * Optional Scala `.kbm` keyboard map for MIDI-in routing (§3-A). When present
+   * (and a tuning is active) incoming MIDI notes route through it instead of the
+   * linear degree map; absent → linear. Only meaningful alongside `tuning`.
+   */
+  keyboardMap?: KeyboardMap
   surface: SurfaceConfig
   patch: PatchParams
   fx: FxParams

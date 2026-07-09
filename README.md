@@ -5,9 +5,9 @@
 **Touch a note. Bend into the next. Never leave the scale.**
 
 
-[![version](https://img.shields.io/badge/version-0.1.18-6c8f3a)](./package.json)
+[![version](https://img.shields.io/badge/version-0.1.21-6c8f3a)](./package.json)
 [![license](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](./LICENSE)
-[![tests](https://img.shields.io/badge/tests-297%20passing-2ea043)](#verification)
+[![tests](https://img.shields.io/badge/tests-307%20passing-2ea043)](#verification)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](./tsconfig.json)
 [![React](https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=white)](https://react.dev)
 [![Vite](https://img.shields.io/badge/Vite-8-646cff?logo=vite&logoColor=white)](https://vite.dev)
@@ -31,7 +31,7 @@
 - **8-voice polyphony** — up to eight simultaneous touches, each tracked as its own voice with clean note-offs and no hung notes.
 - **AudioWorklet synth** — a hand-written voice on the audio thread: 2 oscillators + sub + noise, a resonant filter, two envelopes (amp + filter), an LFO, unison, and glide. DSP runs off the main thread for stable, low-jitter sound.
 - **14 factory presets** across five families — leads (Solar Filament, Neon Cantabile, Copper Wire), pads (Cathedral Dust, Slow Aurora, Velvet Fog), plucks (Rain on Tin, Glass Marbles), bass (Tarpit, Gravel Road), and ambient (Distant Weather, Lantern Drift, Tape Horizon, Underwater Bells).
-- **Microtuning & scales** — play any tuning, not just 12-TET: pick a built-in scale (just intonation, meantone, maqam, gamelan, 19/22/31-EDO…) or import a Scala **`.scl`** scale and **`.kbm`** keyboard map. Arbitrary note counts and non-octave periods (e.g. Bohlen-Pierce) are supported; the resolved per-note frequency crosses to the audio worklet, so retuning is exact and 12-TET stays the click-identical default. The tuning core is vendored verbatim from **[mdrone](https://mdrone.mpump.live)** (`npm run vendored:check`; see [`NOTICE`](./NOTICE)).
+- **Microtuning & scales** — play any tuning, not just 12-TET: pick a built-in scale (just intonation, meantone, maqam, gamelan, 19/22/31-EDO…) or import a Scala **`.scl`** scale and **`.kbm`** keyboard map. Arbitrary note counts and non-octave periods (e.g. Bohlen-Pierce) are supported; the resolved per-note frequency crosses to the audio worklet, so retuning is exact and 12-TET stays the click-identical default. A MIDI controller reaches the full scale under a tuning too — incoming notes follow the active tuning (or its `.kbm` keyboard map when loaded), not a fixed diatonic layout. The tuning core is vendored verbatim from **[mdrone](https://mdrone.mpump.live)** (`npm run vendored:check`; see [`NOTICE`](./NOTICE)).
 - **Four performance macros** — **Glow · Motion · Air · Grit** — each sweeps a curated group of synth and FX parameters for fast, musical shaping.
 - **Performance tools** — arpeggiator, chord mode, latch, and a phrase recorder for building up and looping ideas hands-free.
 - **FX tail** — a shared master chain: drive, chorus, tempo-syncable delay, reverb, and a master limiter. Click-free, no runaway peaks.

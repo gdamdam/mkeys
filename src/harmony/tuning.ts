@@ -79,3 +79,61 @@ export function degreeOctaveToHz(
 export function freqToMidi(freq: number): number {
   return 69 + 12 * Math.log2(freq / 440)
 }
+
+/**
+ * A Scala `.kbm` keyboard map, reduced to what mkeys needs to route incoming
+ * MIDI notes: the reference note that sounds scale degree `degrees[0]`, and the
+ * per-key scale-degree indices (repeating every `degrees.length` keys, one
+ * period up per repeat). `-1` marks an unmapped key.
+ */
+export interface KeyboardMap {
+  refNote: number
+  degrees: readonly number[]
+}
+
+/** Unmapped-key sentinel (matches the vendored core's KBM_UNMAPPED). */
+const KBM_UNMAPPED = -1
+
+/**
+ * Map an incoming MIDI note to a surface cell `(index, octave)` under an active
+ * tuning (§3-A). This replaces the diatonic {@link SCALE_TABLE} routing, which
+ * can only reach 7 degrees and mistunes anything but a heptatonic 12-TET scale.
+ *
+ * Two mappings:
+ *  - With a `.kbm` keyboard map: route `note` through it — key
+ *    `kbm.refNote + i` sounds scale degree `kbm.degrees[i mod size]`, advancing
+ *    one period every `size` keys. Unmapped keys return `null` (no sound).
+ *  - Otherwise: a linear map anchored at the tonic MIDI note
+ *    `(REFERENCE_OCTAVE + 1) * 12 + keyRoot` (the same anchor `degreeToMidi`
+ *    uses), so consecutive MIDI notes step through consecutive scale degrees and
+ *    an N-note scale is fully reachable — e.g. a 19-note tuning turns MIDI notes
+ *    60‥78 into all 19 degrees before rolling into the next octave register.
+ *
+ * `octave` is the surface's absolute octave (REFERENCE_OCTAVE == the tuning's
+ * own octave 0), matching {@link degreeOctaveToHz}, so pitch lands exactly where
+ * touch input on the same cell would.
+ */
+export function midiToTunedCell(
+  note: number,
+  keyRoot: number,
+  tuning: PortableTuning,
+  kbm?: KeyboardMap | null,
+): { index: number; octave: number } | null {
+  const n = tuning.scaleCents.length
+  if (kbm && kbm.degrees.length > 0) {
+    const size = kbm.degrees.length
+    const rel = note - kbm.refNote
+    const within = ((rel % size) + size) % size
+    const periods = Math.floor(rel / size)
+    const degree = kbm.degrees[within]
+    if (degree === KBM_UNMAPPED || degree < 0) return null
+    const index = ((degree % n) + n) % n
+    const octave = REFERENCE_OCTAVE + periods + Math.floor(degree / n)
+    return { index, octave }
+  }
+  const tonic = (REFERENCE_OCTAVE + 1) * 12 + keyRoot
+  const rel = note - tonic
+  const index = ((rel % n) + n) % n
+  const octave = REFERENCE_OCTAVE + Math.floor(rel / n)
+  return { index, octave }
+}

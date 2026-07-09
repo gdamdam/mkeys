@@ -295,3 +295,37 @@ describe('export / import JSON', () => {
     expect((s as Session).version).toBe(SESSION_VERSION)
   })
 })
+
+describe('keyboardMap persistence (§3-A/§4)', () => {
+  const tuning = { tonicHz: 261.6255653005986, scaleCents: [0, 400, 800], period: 1200, name: 'aug' }
+
+  it('round-trips a keyboard map alongside a tuning', () => {
+    const s = sanitizeSession({
+      ...defaultSession(),
+      tuning,
+      keyboardMap: { refNote: 60, degrees: [0, 1, 2] },
+    })
+    expect(s.keyboardMap).toEqual({ refNote: 60, degrees: [0, 1, 2] })
+    // Survives a JSON export → import cycle.
+    const back = importSessionJSON(exportSessionJSON(s)) as Session
+    expect(back.keyboardMap).toEqual({ refNote: 60, degrees: [0, 1, 2] })
+  })
+
+  it('drops a keyboard map with no active tuning (it is meaningless alone)', () => {
+    const s = sanitizeSession({
+      ...defaultSession(),
+      tuning: undefined,
+      keyboardMap: { refNote: 60, degrees: [0, 1, 2] },
+    })
+    expect(s.keyboardMap).toBeUndefined()
+  })
+
+  it('coerces non-integer degree entries to the unmapped sentinel (-1)', () => {
+    const s = sanitizeSession({
+      ...defaultSession(),
+      tuning,
+      keyboardMap: { refNote: 60.7, degrees: [0, 'x', 2.5, 3] },
+    })
+    expect(s.keyboardMap).toEqual({ refNote: 60, degrees: [0, -1, -1, 3] })
+  })
+})

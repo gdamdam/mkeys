@@ -379,7 +379,10 @@ function sanitizeArp(raw: unknown, fb: ArpConfig): ArpConfig {
   return {
     enabled: bool(r.enabled, fb.enabled),
     mode: coerceEnum(r.mode, ARP_MODES, fb.mode),
-    division: num(r.division, 1, 64, fb.division),
+    // `division` is an integer note value (matches persistence/session.ts).
+    // Using `num` here let a fractional value survive a share but get rounded
+    // on the next save, silently rewriting the value on share→save→reload.
+    division: int(r.division, 1, 64, fb.division),
     gate: num(r.gate, 0, 1, fb.gate),
     swing: num(r.swing, 0, 1, fb.swing),
     octaves: int(r.octaves, 1, 4, fb.octaves),

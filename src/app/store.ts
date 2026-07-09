@@ -45,7 +45,8 @@ import type {
 } from '../components/instrument'
 import { AudioEngine, getPreset } from '../audio'
 import { REFERENCE_OCTAVE, SCALE_TABLE, degreeToMidi, midiToNearestDegree } from '../harmony/scales'
-import { degreeOctaveToHz, freqToMidi, normalizeTuning, scaleLengthOf } from '../harmony/tuning'
+import { BUILTIN_PORTABLE_TUNINGS, DEFAULT_TONIC_HZ, degreeOctaveToHz, freqToMidi, importSclText, midiToTunedCell, normalizeTuning, scaleLengthOf } from '../harmony/tuning'
+import { parseKbm } from '../vendor/tuning-core/scala'
 import { buildGrid, effectiveSurface } from '../surface/geometry'
 import { Scheduler, type PatternEvent, type PlannedEvent } from '../transport/scheduler'
 import { secondsPerBeat } from '../transport/clock'
@@ -274,6 +275,8 @@ class InstrumentStore {
       setKeyRoot: this.setKeyRoot,
       setMode: this.setMode,
       setTuning: this.setTuning,
+      importSclFile: this.importSclFile,
+      importKbmFile: this.importKbmFile,
       setLayout: this.setLayout,
       bpm: this.bpm,
       effectiveBpm: this.computeEffectiveBpm(),
@@ -408,7 +411,42 @@ class InstrumentStore {
     const next: Session = { ...this.session }
     if (tuning) next.tuning = normalizeTuning(tuning)
     else delete next.tuning
+    // A keyboard map is bound to a specific scale layout; a new (or cleared)
+    // tuning invalidates it. A subsequent .kbm import re-attaches one.
+    delete next.keyboardMap
     this.session = next
+    this.rebuildGrid()
+    this.autosave()
+    this.emit()
+  }
+
+  /**
+   * Import a Scala `.scl` scale file and make it the active tuning (§4). The
+   * tonic pitch is inherited from the current tuning, else the shared default.
+   * Throws (via the vendored parser) on malformed input — the UI catches it.
+   */
+  importSclFile = (text: string): void => {
+    const tonicHz = this.session.tuning?.tonicHz ?? DEFAULT_TONIC_HZ
+    this.setTuning(importSclText(text, tonicHz))
+  }
+
+  /**
+   * Import a Scala `.kbm` keyboard map (§4): its reference frequency retunes
+   * the active tuning's tonic, and its per-key degree list becomes the MIDI-in
+   * map (§3-A). Requires an active tuning (a `.kbm` carries no scale of its
+   * own). Throws on malformed input.
+   */
+  importKbmFile = (text: string): void => {
+    const kbm = parseKbm(text)
+    // A .kbm carries no scale; apply it over the active tuning, or establish a
+    // 12-TET one so the map is honoured even from the standard state.
+    const base = this.session.tuning ?? BUILTIN_PORTABLE_TUNINGS[0]
+    this.releaseAll()
+    this.session = {
+      ...this.session,
+      tuning: normalizeTuning({ ...base, tonicHz: kbm.refFreq }),
+      keyboardMap: { refNote: kbm.refNote, degrees: [...kbm.degrees] },
+    }
     this.rebuildGrid()
     this.autosave()
     this.emit()
@@ -1113,7 +1151,10 @@ class InstrumentStore {
         // dropped note-off) would otherwise orphan the previous voice.
         const held = this.midiInVoices.get(ev.note)
         if (held !== undefined) this.noteOffVoice(held)
-        const { index, octave } = this.midiToCell(ev.note)
+        const cell = this.midiToCell(ev.note)
+        // A `.kbm` may leave this key unmapped — sound nothing (§3-A).
+        if (!cell) break
+        const { index, octave } = cell
         const vId = this.noteOnAt(index, octave, {
           // Anchor to the cell's resolved (micro)tuned pitch, not the raw
           // incoming note, so MIDI-in follows the active tuning like touch.
@@ -1150,8 +1191,21 @@ class InstrumentStore {
     }
   }
 
-  /** Map an incoming MIDI note to a scale cell in the active key/mode. */
-  private midiToCell(note: number): { index: number; octave: number } {
+  /**
+   * Map an incoming MIDI note to a scale cell (§3-A).
+   *
+   * Under an active tuning the diatonic SCALE_TABLE can't represent the scale
+   * (it caps at 7 degrees and mistunes non-12-TET pitches), so route through the
+   * tuning: honour a loaded `.kbm` keyboard map when present, else map notes to
+   * successive degrees of the N-note scale. Returns `null` for a note a `.kbm`
+   * leaves unmapped (the caller then sounds nothing). Without a tuning the
+   * instrument stays pure 12-TET and the mapping is bit-identical to before.
+   */
+  private midiToCell(note: number): { index: number; octave: number } | null {
+    const t = this.session.tuning
+    if (t) {
+      return midiToTunedCell(note, this.session.keyRoot, t, this.session.keyboardMap)
+    }
     const len = SCALE_TABLE[this.session.mode].length
     const degree = midiToNearestDegree(note, this.session.keyRoot, this.session.mode)
     const index = ((degree % len) + len) % len
