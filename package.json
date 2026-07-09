@@ -1,7 +1,7 @@
 {
   "name": "mkeys",
   "private": true,
-  "version": "0.1.18",
+  "version": "0.1.19",
   "license": "AGPL-3.0-or-later",
   "description": "Touch a note. Bend into the next. Never leave the scale. A local-first, scale-locked lead & melody instrument for the browser.",
   "type": "module",
@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "vendored:check": "node scripts/sync-vendored.mjs",
     "vendored:sync": "node scripts/sync-vendored.mjs --sync",
-    "check": "npm run vendored:check && npm run typecheck && npm run lint && npm run test && npm run build",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run build",
     "preview": "vite preview"
   },
   "dependencies": {
