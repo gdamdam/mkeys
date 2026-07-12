@@ -182,8 +182,9 @@ class InstrumentStore {
   private midiReadyFlag = false
   private midiAccess: MIDIAccess | null = null
   private readonly ownership = new NoteOwnership()
-  private readonly midiInVoices = new Map<number, number>()
-  private midiBend = 0
+  private readonly midiInVoices = new Map<number, { vId: number; channel: number }>()
+  /** Latest pitch-bend per source channel, so MPE per-note bends stay independent. */
+  private readonly midiBend = new Map<number, number>()
   private midiMod = 0
 
   private linkEnabledFlag = false
@@ -1150,7 +1151,7 @@ class InstrumentStore {
         // A repeated note-on for a still-held note (chatty controller or a
         // dropped note-off) would otherwise orphan the previous voice.
         const held = this.midiInVoices.get(ev.note)
-        if (held !== undefined) this.noteOffVoice(held)
+        if (held !== undefined) this.noteOffVoice(held.vId)
         const cell = this.midiToCell(ev.note)
         // A `.kbm` may leave this key unmapped — sound nothing (§3-A).
         if (!cell) break
@@ -1163,19 +1164,19 @@ class InstrumentStore {
           timbre: this.midiMod,
           pressure: ev.velocity / 127,
         })
-        this.midiInVoices.set(ev.note, vId)
+        this.midiInVoices.set(ev.note, { vId, channel: ev.channel })
         break
       }
       case 'noteOff': {
-        const vId = this.midiInVoices.get(ev.note)
-        if (vId !== undefined) {
-          this.noteOffVoice(vId)
+        const held = this.midiInVoices.get(ev.note)
+        if (held !== undefined) {
+          this.noteOffVoice(held.vId)
           this.midiInVoices.delete(ev.note)
         }
         break
       }
       case 'pitchBend': {
-        this.midiBend = ev.value
+        this.midiBend.set(ev.channel, ev.value)
         this.applyMidiExpression()
         break
       }
@@ -1218,12 +1219,13 @@ class InstrumentStore {
 
   /** Fold the latest pitch-bend + mod-wheel into every MIDI-input voice. */
   private applyMidiExpression(): void {
-    for (const vId of this.midiInVoices.values()) {
+    for (const { vId, channel } of this.midiInVoices.values()) {
       const v = this.voices.get(vId)
       if (!v) continue
       this.moveVoice(vId, {
-        // Bend rides on the voice's tuned base pitch, not the raw MIDI note.
-        pitch: v.baseMidi + this.midiBend * 2,
+        // Bend rides on the voice's tuned base pitch, not the raw MIDI note,
+        // using only the bend from the voice's own source channel (MPE).
+        pitch: v.baseMidi + (this.midiBend.get(channel) ?? 0) * 2,
         glide: 0,
         timbre: this.midiMod,
         pressure: v.expr.pressure,
