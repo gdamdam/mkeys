@@ -131,62 +131,65 @@ export function TransportBar() {
         </div>
       </div>
 
-      {/* MIDI + bus — everything that routes signal in or out lives here */}
+      {/* Routing — everything that moves signal in or out: MIDI and the mbus */}
       <div className="transport__block">
-        {inst.midiReady ? (
-          <div className="transport__row">
+        <span className="eyebrow">Routing</span>
+        <div className="transport__row">
+          {inst.midiReady ? (
+            <>
+              <Toggle
+                label="MIDI in"
+                checked={session.midi.inEnabled}
+                onChange={(v) => inst.setMidiConfig({ ...session.midi, inEnabled: v })}
+              />
+              <Toggle
+                label="MIDI out"
+                checked={session.midi.outEnabled}
+                onChange={(v) => inst.setMidiConfig({ ...session.midi, outEnabled: v })}
+              />
+              <Select
+                label="Out channel"
+                options={MIDI_CHANNELS}
+                value={String(session.midi.outChannel)}
+                disabled={!session.midi.outEnabled || session.midi.mpe}
+                onChange={(v) => inst.setMidiConfig({ ...session.midi, outChannel: Number(v) })}
+              />
+              <Toggle
+                label="MPE"
+                hint="microtonal out (±48 st)"
+                checked={session.midi.mpe}
+                disabled={!session.midi.outEnabled}
+                onChange={(v) => inst.setMidiConfig({ ...session.midi, mpe: v })}
+              />
+            </>
+          ) : (
+            <button type="button" className="pbtn" onClick={() => void inst.enableMidi()}>
+              Enable MIDI
+            </button>
+          )}
+          <span
+            className="transport__row"
+            title={
+              inst.mbusPublishing
+                ? 'Publishing the master output to the mbus patchbay (via the local link-bridge)'
+                : 'Publish the master output to the mbus patchbay (needs the local link-bridge; harmless without it)'
+            }
+          >
+            <span className={inst.mbusPublishing ? 'pill pill--live' : 'pill'}>
+              <span className="pill__dot" />
+              {inst.mbusPublishing ? 'bus on' : 'bus'}
+            </span>
             <Toggle
-              label="MIDI in"
-              checked={session.midi.inEnabled}
-              onChange={(v) => inst.setMidiConfig({ ...session.midi, inEnabled: v })}
+              aria-label="Publish to mbus"
+              checked={inst.mbusPublishing}
+              onChange={() => inst.toggleMbusPublish()}
             />
-            <Toggle
-              label="MIDI out"
-              checked={session.midi.outEnabled}
-              onChange={(v) => inst.setMidiConfig({ ...session.midi, outEnabled: v })}
-            />
-            <Select
-              label="Out channel"
-              options={MIDI_CHANNELS}
-              value={String(session.midi.outChannel)}
-              disabled={!session.midi.outEnabled || session.midi.mpe}
-              onChange={(v) => inst.setMidiConfig({ ...session.midi, outChannel: Number(v) })}
-            />
-            <Toggle
-              label="MPE"
-              hint="microtonal out (±48 st)"
-              checked={session.midi.mpe}
-              disabled={!session.midi.outEnabled}
-              onChange={(v) => inst.setMidiConfig({ ...session.midi, mpe: v })}
-            />
-          </div>
-        ) : (
-          <button type="button" className="pbtn" onClick={() => void inst.enableMidi()}>
-            Enable MIDI
-          </button>
-        )}
-        <div
-          className="transport__row"
-          title={
-            inst.mbusPublishing
-              ? 'Publishing the master output to the mbus patchbay (via the local link-bridge)'
-              : 'Publish the master output to the mbus patchbay (needs the local link-bridge; harmless without it)'
-          }
-        >
-          <span className={inst.mbusPublishing ? 'pill pill--live' : 'pill'}>
-            <span className="pill__dot" />
-            {inst.mbusPublishing ? 'bus on' : 'bus'}
           </span>
-          <Toggle
-            aria-label="Publish to mbus"
-            checked={inst.mbusPublishing}
-            onChange={() => inst.toggleMbusPublish()}
-          />
         </div>
       </div>
 
-      {/* layout */}
-      <div className="transport__block">
+      {/* layout — pinned to the right edge to bookend the engine row */}
+      <div className="transport__block transport__block--end">
         <Segmented
           label="Layout"
           options={LAYOUT_OPTIONS}

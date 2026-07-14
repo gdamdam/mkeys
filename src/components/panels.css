@@ -114,14 +114,29 @@
   flex-wrap: wrap;
 }
 
-/* chromatic key strip: 12 compact toggles that wrap */
+/* chromatic key strip: 12 compact toggles that wrap. Tightened so the whole
+   pitch strip (Key · Scale · Tuning) fits one line at laptop widths. */
 .keystrip .segmented__row {
   flex-wrap: wrap;
 }
+.keystrip .segmented__opt {
+  min-height: 34px;
+  padding: 4px 9px;
+}
 
-/* master output + pre-FX gain sliders in the transport header */
+/* master output + pre-FX gain sliders, side by side: half the vertical
+   footprint of a stacked pair, so the engine row stays one control tall */
 .levels {
-  min-width: 132px;
+  flex-direction: row;
+  gap: var(--sp-4);
+}
+.levels .slider {
+  min-width: 116px;
+}
+
+/* pin the last engine block (Layout) to the right edge to bookend the row */
+.transport__block--end {
+  margin-left: auto;
 }
 
 /* --- status pill (Link / MIDI readiness) ---------------------------------- */
