@@ -55,6 +55,8 @@
      of different heights read as scattered. */
   align-items: flex-start;
   gap: var(--sp-4) var(--sp-5);
+  /* Breathing room so edge labels never sit flush against the window. */
+  padding: var(--sp-3) clamp(0.5rem, 1.5vw, 1.25rem);
 }
 /* Full-width flex break: everything after it forms the pitch strip (Key ·
    Scale · Tuning), hairline-separated from the engine row above. */
@@ -334,4 +336,46 @@
   background: var(--danger);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 20%, transparent);
   animation: pill-pulse 1.2s ease-in-out infinite;
+}
+
+/* --- bottom-dock module flow ----------------------------------------------
+   The control drawer docks to the bottom of the window, so a tab's groups sit
+   side by side (hairline-separated columns) instead of one long narrow stack.
+   Scoped to .app__panels and appended last so it wins over the stacked-layout
+   rules above. */
+.app__panels .pgroup-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--sp-4) 0;
+}
+.app__panels .pgroup {
+  flex: 0 1 auto;
+  min-inline-size: 11rem;
+  max-inline-size: 26rem;
+  padding-inline: var(--sp-5);
+  border-inline-start: var(--line-w) solid var(--line);
+}
+.app__panels .pgroup:first-child {
+  padding-inline-start: 0;
+  border-inline-start: none;
+}
+.app__panels .pgroup + .pgroup {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+/* Direct panel modules that aren't pgroup-wraps: presets and macros become
+   width-bounded columns in the bottom bar. */
+.app__panels .presetlib {
+  flex: 0 1 34rem;
+  min-inline-size: 18rem;
+}
+.app__panels .presetlib .presetcat + .presetcat {
+  margin-top: var(--sp-3);
+}
+.app__panels .macropad {
+  flex: 0 0 auto;
+  padding-inline: var(--sp-5);
+  border-inline-start: var(--line-w) solid var(--line);
 }

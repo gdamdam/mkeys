@@ -86,15 +86,17 @@ export default function App() {
         <Surface className="app__surface" />
       </main>
 
-      <button
-        type="button"
-        className="app__drawer-toggle"
-        onClick={() => setDrawerOpen((v) => !v)}
-        aria-expanded={drawerOpen}
-        aria-controls="control-drawer"
-      >
-        {drawerOpen ? 'Hide controls' : 'Show controls'}
-      </button>
+      {!drawerOpen && (
+        <button
+          type="button"
+          className="app__drawer-toggle"
+          onClick={() => setDrawerOpen(true)}
+          aria-expanded={false}
+          aria-controls="control-drawer"
+        >
+          Show controls
+        </button>
+      )}
 
       <aside
         id="control-drawer"
@@ -114,6 +116,15 @@ export default function App() {
               {t.label}
             </button>
           ))}
+          <button
+            type="button"
+            className="app__drawer-toggle"
+            onClick={() => setDrawerOpen(false)}
+            aria-expanded={true}
+            aria-controls="control-drawer"
+          >
+            Hide controls
+          </button>
         </div>
 
         <div className="app__panels" role="tabpanel">

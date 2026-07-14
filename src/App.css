@@ -77,10 +77,16 @@
   position: sticky;
   inset-block-start: 0;
   display: flex;
+  align-items: center;
   gap: 0.25rem;
   padding: 0.5rem 0;
   background: var(--slate);
   z-index: 1;
+}
+/* Inside the tabs row the toggle loses its floating-button geometry and pins
+   to the right end, opposite the tab list. */
+.app__tabs .app__drawer-toggle {
+  margin: 0 0 0 auto;
 }
 .app__tab {
   padding: 0.4rem 0.85rem;
@@ -100,10 +106,13 @@
   background: var(--slate-2, var(--ink));
 }
 
+/* Panel modules flow horizontally across the bottom bar and wrap; the drawer
+   scrolls vertically only when a tab genuinely overflows two rows. */
 .app__panels {
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem 1.5rem;
 }
 
 /* Power-on gesture screen --------------------------------------------------- */
@@ -175,32 +184,9 @@
   color: var(--haze-dim);
 }
 
-/* Desktop: dock the drawer to the right so the surface stays wide. */
-@media (min-width: 900px) {
-  .app {
-    grid-template-columns: 1fr auto;
-    grid-template-rows: auto 1fr;
-    grid-template-areas:
-      'transport transport'
-      'stage drawer';
-  }
-  .app__drawer {
-    inline-size: min(24rem, 32vw);
-    max-block-size: none;
-    border-top: none;
-    border-inline-start: 1px solid var(--line);
-  }
-  /* The toggle shares the drawer's grid area; docked right it would float
-     dead-centre over the panel content, so pin it to the bottom edge. */
-  .app__drawer-toggle {
-    align-self: end;
-    margin: 0 auto 0.5rem;
-    z-index: 2;
-  }
-  .app--focus .app__drawer {
-    display: none;
-  }
-}
+/* The drawer docks to the bottom at every width (device-view style): panel
+   modules get the full window width to sit side by side, so navigating a tab
+   is a glance instead of a long scroll in a narrow column. */
 
 @media (prefers-reduced-motion: reduce) {
   .poweron__start {
