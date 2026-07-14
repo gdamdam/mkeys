@@ -63,9 +63,13 @@ export function TransportBar() {
 
   return (
     <div className="transport">
-      <h1 className="transport__wordmark">
-        <img src={`${import.meta.env.BASE_URL}mkeys-wordmark.svg`} alt="mkeys" width={120} height={40} />
-      </h1>
+      <div className="transport__brand">
+        <h1 className="transport__wordmark">
+          <img src={`${import.meta.env.BASE_URL}mkeys-wordmark.svg`} alt="mkeys" width={120} height={40} />
+        </h1>
+        {/* Build version, so what's actually running is visible at a glance. */}
+        <span className="transport__version">v{__APP_VERSION__}</span>
+      </div>
 
       {/* master output level + pre-FX input gain */}
       <div className="transport__block levels">

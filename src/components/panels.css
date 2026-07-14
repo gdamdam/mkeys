@@ -54,9 +54,22 @@
   align-items: center;
   gap: var(--sp-4) var(--sp-5);
 }
+.transport__brand {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-2);
+}
 .transport__wordmark {
   margin: 0;
   line-height: 0;
+}
+.transport__version {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--haze-dim);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  padding-bottom: 2px;
 }
 .transport__wordmark img {
   display: block;
