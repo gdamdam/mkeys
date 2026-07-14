@@ -103,6 +103,8 @@ export interface Instrument {
   setMode: (mode: Mode) => void
   /** Load a microtuning (arbitrary N, non-octave periods) or clear to 12-TET (null). */
   setTuning: (tuning: PortableTuning | null) => void
+  /** Retune the active tuning's tonic in Hz (no-op without a tuning). */
+  setTonic: (tonicHz: number) => void
   /** Import a Scala `.scl` scale file as the active tuning. Throws on bad input. */
   importSclFile: (text: string) => void
   /** Import a Scala `.kbm` keyboard map (retunes tonic + sets MIDI-in map). Throws on bad input or no active tuning. */

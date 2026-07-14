@@ -66,6 +66,8 @@ import {
 } from '../transport/mbus'
 import { parseMidiMessage } from '../midi/parse'
 import { NoteOwnership } from '../midi/ownership'
+import { pitchBendBytes } from '../midi/emit'
+import { bendForSemitones, MpeAllocator } from '../midi/mpe'
 import * as db from '../persistence/db'
 import {
   MAX_PHRASE_EVENTS,
@@ -182,6 +184,8 @@ class InstrumentStore {
   private midiReadyFlag = false
   private midiAccess: MIDIAccess | null = null
   private readonly ownership = new NoteOwnership()
+  /** Per-voice member-channel assignment for MPE output (§4, microtonal note-out). */
+  private readonly mpeAlloc = new MpeAllocator()
   private readonly midiInVoices = new Map<number, { vId: number; channel: number }>()
   /** Latest pitch-bend per source channel, so MPE per-note bends stay independent. */
   private readonly midiBend = new Map<number, number>()
@@ -276,6 +280,7 @@ class InstrumentStore {
       setKeyRoot: this.setKeyRoot,
       setMode: this.setMode,
       setTuning: this.setTuning,
+      setTonic: this.setTonic,
       importSclFile: this.importSclFile,
       importKbmFile: this.importKbmFile,
       setLayout: this.setLayout,
@@ -448,6 +453,22 @@ class InstrumentStore {
       tuning: normalizeTuning({ ...base, tonicHz: kbm.refFreq }),
       keyboardMap: { refNote: kbm.refNote, degrees: [...kbm.degrees] },
     }
+    this.rebuildGrid()
+    this.autosave()
+    this.emit()
+  }
+
+  /**
+   * Retune the active tuning's tonic (reference pitch in Hz). No-op without a
+   * tuning (12-TET has no adjustable tonic). Preserves any loaded `.kbm` map —
+   * only the reference frequency moves. Sounding notes are released first.
+   */
+  setTonic = (tonicHz: number): void => {
+    const t = this.session.tuning
+    if (!t) return
+    const hz = tonicHz < 20 ? 20 : tonicHz > 4000 ? 4000 : tonicHz
+    this.releaseAll()
+    this.session = { ...this.session, tuning: normalizeTuning({ ...t, tonicHz: hz }) }
     this.rebuildGrid()
     this.autosave()
     this.emit()
@@ -1235,19 +1256,37 @@ class InstrumentStore {
 
   private midiSendNoteOn(engineId: number, midi: number, velocity: number): void {
     if (!this.session.midi.outEnabled || !this.midiAccess) return
+    const vel = Math.round(clamp01(velocity) * 127)
+    if (this.session.midi.mpe) {
+      // MPE: own member channel per voice + a pitch bend carrying the fractional
+      // (microtuning) offset, so each voice reaches its exact pitch independently.
+      const { channel, evicted } = this.mpeAlloc.acquire(engineId)
+      const note = Math.round(midi)
+      const messages: number[][] = []
+      // Steal happened (>15 voices): flush the evicted voice so it never hangs.
+      if (evicted !== null) messages.push(...this.ownership.noteOff(evicted))
+      // Bend before note-on so the note sounds in tune from its first sample.
+      messages.push(pitchBendBytes(bendForSemitones(midi - note), channel))
+      messages.push(...this.ownership.noteOn(engineId, note, vel, channel))
+      this.sendMidi(messages)
+      return
+    }
+    // Single-channel: `midi` may be a fractional tuned anchor; emit rounds it.
     const channel = this.session.midi.outChannel - 1
-    this.sendMidi(this.ownership.noteOn(engineId, midi, Math.round(clamp01(velocity) * 127), channel))
+    this.sendMidi(this.ownership.noteOn(engineId, midi, vel, channel))
   }
 
   private midiSendNoteOff(engineId: number): void {
     if (!this.midiAccess) return
     // Always flush a tracked off, even if output was toggled off mid-note.
     this.sendMidi(this.ownership.noteOff(engineId))
+    this.mpeAlloc.release(engineId)
   }
 
   private midiPanic(): void {
     if (!this.midiAccess) return
     this.sendMidi(this.ownership.panic())
+    this.mpeAlloc.clear()
   }
 
   private sendMidi(messages: number[][]): void {
@@ -1262,6 +1301,13 @@ class InstrumentStore {
       inEnabled: !!next.inEnabled,
       outEnabled: !!next.outEnabled,
       outChannel: clampInt(next.outChannel, 1, 16),
+      mpe: !!next.mpe,
+    }
+    // Switching output mode/channel remaps channels; flush first so no note hangs
+    // on a channel we're about to stop tracking.
+    const prev = this.session.midi
+    if (midi.mpe !== prev.mpe || midi.outEnabled !== prev.outEnabled || midi.outChannel !== prev.outChannel) {
+      this.midiPanic()
     }
     this.session = { ...this.session, midi }
     if ((midi.inEnabled || midi.outEnabled) && !this.midiReadyFlag) {

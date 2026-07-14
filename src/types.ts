@@ -211,6 +211,13 @@ export interface MidiConfig {
   inEnabled: boolean
   outEnabled: boolean
   outChannel: number
+  /**
+   * MPE output: when true, each voice sends on its own member channel with a
+   * per-note pitch bend, so a microtuning's exact (non-12-TET) pitches reach
+   * external gear. When false, notes go out on {@link outChannel} rounded to the
+   * nearest 12-TET note. Ignored for MIDI-in.
+   */
+  mpe: boolean
 }
 
 /**

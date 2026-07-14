@@ -24,7 +24,7 @@ import { REFERENCE_OCTAVE } from './scales'
 
 export type { PortableTuning }
 export { degreeToHz, isValidTuning, normalizeTuning, periodCents }
-export { BUILTIN_PORTABLE_TUNINGS, DEFAULT_TONIC_HZ } from '../vendor/tuning-core/builtins'
+export { AUTHORED_PORTABLE_TUNINGS, BUILTIN_PORTABLE_TUNINGS, DEFAULT_TONIC_HZ } from '../vendor/tuning-core/builtins'
 
 /**
  * Parse a Scala `.scl` scale file into a normalized {@link PortableTuning} at

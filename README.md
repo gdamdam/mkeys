@@ -31,11 +31,11 @@
 - **8-voice polyphony** — up to eight simultaneous touches, each tracked as its own voice with clean note-offs and no hung notes.
 - **AudioWorklet synth** — a hand-written voice on the audio thread: 2 oscillators + sub + noise, a resonant filter, two envelopes (amp + filter), an LFO, unison, and glide. DSP runs off the main thread for stable, low-jitter sound.
 - **14 factory presets** across five families — leads (Solar Filament, Neon Cantabile, Copper Wire), pads (Cathedral Dust, Slow Aurora, Velvet Fog), plucks (Rain on Tin, Glass Marbles), bass (Tarpit, Gravel Road), and ambient (Distant Weather, Lantern Drift, Tape Horizon, Underwater Bells).
-- **Microtuning & scales** — play any tuning, not just 12-TET: pick a built-in scale (just intonation, meantone, maqam, gamelan, 19/22/31-EDO…) or import a Scala **`.scl`** scale and **`.kbm`** keyboard map. Arbitrary note counts and non-octave periods (e.g. Bohlen-Pierce) are supported; the resolved per-note frequency crosses to the audio worklet, so retuning is exact and 12-TET stays the click-identical default. A MIDI controller reaches the full scale under a tuning too — incoming notes follow the active tuning (or its `.kbm` keyboard map when loaded), not a fixed diatonic layout. The tuning core is vendored verbatim from **[mdrone](https://mdrone.mpump.live)** (`npm run vendored:check`; see [`NOTICE`](./NOTICE)).
+- **Microtuning & scales** — play any tuning, not just 12-TET: from the **Perform** panel pick a built-in scale (just intonation, meantone, maqam, gamelan, 19/22/31-EDO…), set the tonic reference pitch, or import a Scala **`.scl`** scale and **`.kbm`** keyboard map. Arbitrary note counts and non-octave periods (e.g. Bohlen-Pierce) are supported; the resolved per-note frequency crosses to the audio worklet, so retuning is exact and 12-TET stays the click-identical default. A MIDI controller reaches the full scale under a tuning too — incoming notes follow the active tuning (or its `.kbm` keyboard map when loaded), not a fixed diatonic layout. The tuning core is vendored verbatim from **[mdrone](https://mdrone.mpump.live)** (`npm run vendored:check`; see [`NOTICE`](./NOTICE)).
 - **Four performance macros** — **Glow · Motion · Air · Grit** — each sweeps a curated group of synth and FX parameters for fast, musical shaping.
 - **Performance tools** — arpeggiator, chord mode, latch, and a phrase recorder for building up and looping ideas hands-free.
 - **FX tail** — a shared master chain: drive, chorus, tempo-syncable delay, reverb, and a master limiter. Click-free, no runaway peaks.
-- **Optional MIDI in + out** — receive from a controller and send the *actual played notes* with correct note-ownership and note-offs. Never required.
+- **Optional MIDI in + out** — receive from a controller and send the *actual played notes* with correct note-ownership and note-offs. Enable **MPE** on output to carry microtuned pitches to external gear: each voice takes its own member channel with a per-note pitch bend (receiver bend range ±48 semitones), so a chord's notes bend independently instead of rounding to 12-TET. Never required.
 - **Optional Ableton Link** — tempo-follow via the companion **mpump** link-bridge; degrades gracefully when it's absent.
 - **Optional mbus publish** — the “bus” toggle next to Link offers the master output to the [mbus](https://mbus.mpump.live) patchbay as a source named `mkeys` (tab-to-tab WebRTC via the same link-bridge, peer-to-peer, no server). Off by default; harmless without the bridge.
 - **Sessions, JSON & share links** — the working session autosaves; named sessions use local persistence (IndexedDB), readable JSON import/export, and self-contained share links — no backend.
@@ -118,7 +118,7 @@ Tests are deterministic and live next to the code (scales & degrees, surface geo
 - [ ] Multi-touch polyphony — up to 8 fingers, each an independent voice
 - [ ] Glide / timbre / pressure — all three axes respond smoothly per touch
 - [ ] No hung notes — lifting, dragging off-surface, and losing focus all release cleanly
-- [ ] MIDI in + out — controller input plays; played notes emit with correct offs
+- [ ] MIDI in + out — controller input plays; played notes emit with correct offs; MPE out plays a microtuning in tune on external gear (bend range ±48)
 - [ ] Ableton Link — tempo-follow tracks the bridge, degrades gracefully without it
 - [ ] PWA — installs, and works offline after the first visit
 - [ ] WAV export — master capture produces a clean, click-free file

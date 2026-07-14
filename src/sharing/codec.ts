@@ -90,7 +90,9 @@ type CompactSurface = [number, number, number, number, number, number]
 /** [enabled 0/1, modeIdx, division, gate, swing, octaves] */
 type CompactArp = [number, number, number, number, number, number]
 /** [inEnabled 0/1, outEnabled 0/1, outChannel] */
-type CompactMidi = [number, number, number]
+// [inEnabled, outEnabled, outChannel, mpe?]. mpe appended in 0.2; older 3-element
+// payloads decode with mpe off.
+type CompactMidi = [number, number, number, number?]
 /** [pitch, glide, timbre, pressure] */
 type CompactExpr = [number, number, number, number]
 /** [time, typeIdx, degree, octave, expr|null] */
@@ -185,7 +187,7 @@ export function createDefaultSession(): Session {
     macros: { glow: 0.3, motion: 0.3, air: 0.3, grit: 0.3 },
     arp: { enabled: false, mode: 'up', division: 8, gate: 0.8, swing: 0, octaves: 1 },
     chordMode: 'off',
-    midi: { inEnabled: false, outEnabled: false, outChannel: 1 },
+    midi: { inEnabled: false, outEnabled: false, outChannel: 1, mpe: false },
     phrase: null,
   }
 }
@@ -395,6 +397,7 @@ function sanitizeMidi(raw: unknown, fb: MidiConfig): MidiConfig {
     inEnabled: bool(r.inEnabled, fb.inEnabled),
     outEnabled: bool(r.outEnabled, fb.outEnabled),
     outChannel: int(r.outChannel, 1, 16, fb.outChannel),
+    mpe: bool(r.mpe, fb.mpe),
   }
 }
 
@@ -547,7 +550,7 @@ function toCompact(s: Session): CompactSession {
       s.arp.octaves,
     ],
     cm: CHORD_MODES.indexOf(s.chordMode),
-    mi: [s.midi.inEnabled ? 1 : 0, s.midi.outEnabled ? 1 : 0, s.midi.outChannel],
+    mi: [s.midi.inEnabled ? 1 : 0, s.midi.outEnabled ? 1 : 0, s.midi.outChannel, s.midi.mpe ? 1 : 0],
     ph: encodePhrase(s.phrase),
     mv: s.masterVolume,
     ig: s.inputGain,
@@ -680,7 +683,8 @@ function fromCompact(raw: unknown): Record<string, unknown> {
       octaves: nn(ar[5]),
     },
     chordMode: fromIdx(CHORD_MODES, raw.cm),
-    midi: { inEnabled: mi[0] === 1, outEnabled: mi[1] === 1, outChannel: nn(mi[2]) },
+    // mi[3] (mpe) is absent in pre-0.2 payloads → defaults off.
+    midi: { inEnabled: mi[0] === 1, outEnabled: mi[1] === 1, outChannel: nn(mi[2]), mpe: mi[3] === 1 },
     phrase: raw.ph === null || raw.ph === undefined ? null : decodePhrase(raw.ph),
     // Pass through untouched: absent in older payloads, where sanitizeSession
     // supplies the default (1) rather than nn()'s 0 (which would be silence).

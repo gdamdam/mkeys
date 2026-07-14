@@ -18,6 +18,7 @@ import {
 } from './ui'
 import type { SegmentedOption, SelectOption } from './ui'
 import { useInstrument } from '../app/useInstrument'
+import { TuningControls } from './TuningControls'
 import type { ArpConfig, ChordMode } from '../types'
 import './panels.css'
 
@@ -59,6 +60,9 @@ export function PerformancePanel() {
 
   return (
     <div className="pgroup-wrap">
+      {/* Tuning / microtuning */}
+      <TuningControls />
+
       {/* Arpeggiator */}
       <section className="pgroup">
         <div className="transport__row" style={{ justifyContent: 'space-between' }}>

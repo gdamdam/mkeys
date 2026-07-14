@@ -149,7 +149,7 @@ export function defaultSession(): Session {
     macros: { glow: 0, motion: 0, air: 0, grit: 0 },
     arp: { enabled: false, mode: 'up', division: 4, gate: 0.5, swing: 0, octaves: 1 },
     chordMode: 'off',
-    midi: { inEnabled: false, outEnabled: false, outChannel: 1 },
+    midi: { inEnabled: false, outEnabled: false, outChannel: 1, mpe: false },
     phrase: null,
   }
 }
@@ -292,6 +292,7 @@ function sanitizeMidi(v: unknown, d: MidiConfig): MidiConfig {
     inEnabled: bool(prop(v, 'inEnabled'), d.inEnabled),
     outEnabled: bool(prop(v, 'outEnabled'), d.outEnabled),
     outChannel: int(prop(v, 'outChannel'), 1, 16, d.outChannel),
+    mpe: bool(prop(v, 'mpe'), d.mpe),
   }
 }
 

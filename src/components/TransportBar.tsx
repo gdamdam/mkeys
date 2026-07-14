@@ -177,8 +177,15 @@ export function TransportBar() {
               label="Out channel"
               options={MIDI_CHANNELS}
               value={String(session.midi.outChannel)}
-              disabled={!session.midi.outEnabled}
+              disabled={!session.midi.outEnabled || session.midi.mpe}
               onChange={(v) => inst.setMidiConfig({ ...session.midi, outChannel: Number(v) })}
+            />
+            <Toggle
+              label="MPE"
+              hint="microtonal out (±48 st)"
+              checked={session.midi.mpe}
+              disabled={!session.midi.outEnabled}
+              onChange={(v) => inst.setMidiConfig({ ...session.midi, mpe: v })}
             />
           </div>
         ) : (
