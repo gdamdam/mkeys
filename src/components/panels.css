@@ -141,6 +141,16 @@
   margin-left: auto;
 }
 
+/* current register readout between the Oct −/+ buttons */
+.transport__octave {
+  min-width: 2ch;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui);
+  font-variant-numeric: tabular-nums;
+  color: var(--bone);
+}
+
 /* --- status pill (Link / MIDI readiness) ---------------------------------- */
 .pill {
   display: inline-flex;

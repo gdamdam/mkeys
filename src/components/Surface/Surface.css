@@ -37,8 +37,13 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  min-height: var(--touch);
-  min-width: var(--touch);
+  /* NO min size: the 1fr grid tracks must always fit the container exactly.
+     A min-height/width makes tracks overflow (clipped by overflow:hidden) on
+     short windows, and then coordinate hit-testing — which divides the
+     element's rect uniformly — no longer matches the visible pads: touches
+     play pads rows below the finger. Small pads beat mistuned geometry. */
+  min-height: 0;
+  min-width: 0;
   padding: var(--sp-2);
   border-radius: var(--radius-sm);
   box-sizing: border-box;

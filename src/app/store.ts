@@ -284,6 +284,7 @@ class InstrumentStore {
       importSclFile: this.importSclFile,
       importKbmFile: this.importKbmFile,
       setLayout: this.setLayout,
+      setBaseOctave: this.setBaseOctave,
       bpm: this.bpm,
       effectiveBpm: this.computeEffectiveBpm(),
       setBpm: this.setBpm,
@@ -477,6 +478,17 @@ class InstrumentStore {
   setLayout = (layout: Session['surface']['layout']): void => {
     this.releaseAll()
     this.session = { ...this.session, surface: { ...this.session.surface, layout } }
+    this.rebuildGrid()
+    this.autosave()
+    this.emit()
+  }
+
+  /** Shift the surface's register: the octave of the bottom-left pad. */
+  setBaseOctave = (octave: number): void => {
+    const baseOctave = clampInt(octave, -1, 9)
+    if (baseOctave === this.session.surface.baseOctave) return
+    this.releaseAll()
+    this.session = { ...this.session, surface: { ...this.session.surface, baseOctave } }
     this.rebuildGrid()
     this.autosave()
     this.emit()

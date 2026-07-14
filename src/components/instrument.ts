@@ -110,6 +110,8 @@ export interface Instrument {
   /** Import a Scala `.kbm` keyboard map (retunes tonic + sets MIDI-in map). Throws on bad input or no active tuning. */
   importKbmFile: (text: string) => void
   setLayout: (layout: SurfaceConfig['layout']) => void
+  /** Shift the surface register: octave of the bottom-left pad (clamped -1..9). */
+  setBaseOctave: (octave: number) => void
 
   // --- tempo (transient — not on Session) ----------------------------------
   bpm: number

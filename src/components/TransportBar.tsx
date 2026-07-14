@@ -228,6 +228,32 @@ export function TransportBar() {
       </div>
       {/* tuning — the third "which pitches" control; overrides Scale when active */}
       <TuningControls />
+
+      {/* register — which octave the bottom-left pad starts at */}
+      <div className="transport__block">
+        <span className="eyebrow">Octave</span>
+        <div className="transport__row">
+          <button
+            type="button"
+            className="pbtn"
+            aria-label="Octave down"
+            disabled={session.surface.baseOctave <= -1}
+            onClick={() => inst.setBaseOctave(session.surface.baseOctave - 1)}
+          >
+            −
+          </button>
+          <span className="transport__octave">{session.surface.baseOctave}</span>
+          <button
+            type="button"
+            className="pbtn"
+            aria-label="Octave up"
+            disabled={session.surface.baseOctave >= 9}
+            onClick={() => inst.setBaseOctave(session.surface.baseOctave + 1)}
+          >
+            +
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
