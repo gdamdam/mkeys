@@ -374,13 +374,31 @@
   padding: 0;
   border: none;
 }
-/* The preset library is a browser, not a knob section — give it two grid
-   columns so the set-list reads across, not down. */
+/* The preset library is a browser, not a knob section: a full-width band at
+   the top of the tab, its five genre columns side by side, so the whole
+   set-list is visible at once instead of a tall tower that staggers the grid. */
 .app__panels .pgroup--presets {
-  grid-column: span 2;
+  grid-column: 1 / -1;
+}
+.app__panels .presetlib {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--sp-4) var(--sp-6);
+}
+.app__panels .presetcat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-inline-size: 9rem;
 }
 .app__panels .presetcat + .presetcat {
-  margin-top: var(--sp-3);
+  margin-top: 0;
+}
+.app__panels .presetgrid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
 }
 /* Keep the four macro dials as a 2x2 block rather than a tall single column. */
 .app__panels .macropad {
