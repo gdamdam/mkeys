@@ -6,6 +6,7 @@
  */
 import { Segmented, Select, Slider, Toggle } from './ui'
 import type { SegmentedOption, SelectOption } from './ui'
+import { TuningControls } from './TuningControls'
 import { useInstrument } from '../app/useInstrument'
 import { MODES } from '../types'
 import type { Mode, PitchClass, SurfaceConfig } from '../types'
@@ -110,6 +111,9 @@ export function TransportBar() {
           onChange={(m) => inst.setMode(m)}
         />
       </div>
+
+      {/* tuning — the third "which pitches" control; overrides Scale when active */}
+      <TuningControls />
 
       {/* tempo */}
       <div className="transport__block">

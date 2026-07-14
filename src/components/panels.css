@@ -83,6 +83,15 @@
   gap: var(--sp-2);
   min-width: 0;
 }
+/* Tuning sits beside Scale in the top bar; keep it compact. */
+.tuningstrip__tonic {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pinput--hz {
+  width: 5.5rem;
+}
 .transport__row {
   display: flex;
   align-items: center;
