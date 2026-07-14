@@ -53,7 +53,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  max-block-size: min(46dvh, 30rem);
+  max-block-size: min(58dvh, 40rem);
   padding: 0 clamp(0.5rem, 2vw, 1.25rem) clamp(0.5rem, 2vw, 1.25rem);
   overflow: hidden auto;
   background: var(--slate);
@@ -106,17 +106,14 @@
   background: var(--slate-2, var(--ink));
 }
 
-/* A tab reads as a device rack: titled sections in one horizontal chain,
-   scrolled sideways when the chain is longer than the window. No wrapping, so
-   sections never land at random widths/heights the way a flex-wrap grid does. */
+/* A tab is a grid of equal-width titled sections that WRAP to fill the window
+   width — no horizontal overflow, no ragged flex widths. Taller content is
+   reached by scrolling the drawer vertically (its natural axis). */
 .app__panels {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: flex-start;
-  gap: clamp(1rem, 2.5vw, 2rem);
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: 0.25rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  align-items: start;
+  gap: 1.25rem 2rem;
 }
 
 /* Power-on gesture screen --------------------------------------------------- */

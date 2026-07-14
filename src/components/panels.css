@@ -368,23 +368,21 @@
   display: contents;
 }
 .app__panels .pgroup {
-  flex: 0 0 auto;
-  max-inline-size: 17rem;
+  min-inline-size: 0;
   /* reset the vertical-stack spacing/divider from the base .pgroup + .pgroup */
   margin: 0;
   padding: 0;
   border: none;
 }
-/* Sections whose content wants a wider column than the 17rem default. */
+/* The preset library is a browser, not a knob section — give it two grid
+   columns so the set-list reads across, not down. */
 .app__panels .pgroup--presets {
-  max-inline-size: 26rem;
+  grid-column: span 2;
 }
 .app__panels .presetcat + .presetcat {
   margin-top: var(--sp-3);
 }
-/* Knob shelves inside a rack column wrap to a compact 2–3 across instead of
-   forcing the column to the full width of a single knob row. */
-.app__panels .pgroup > .pshelf,
-.app__panels .psub > .pshelf {
-  max-inline-size: 15rem;
+/* Keep the four macro dials as a 2x2 block rather than a tall single column. */
+.app__panels .macropad {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
