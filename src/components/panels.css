@@ -374,6 +374,19 @@
   padding: 0;
   border: none;
 }
+
+/* Synth rack: the sections have very uneven heights (Oscillators dwarfs LFO),
+   so a grid leaves ragged gaps. A masonry column flow packs them tight, each
+   section kept whole. Full-width band under the preset library. */
+.app__panels .soundrack {
+  grid-column: 1 / -1;
+  columns: 21rem;
+  column-gap: var(--sp-6);
+}
+.app__panels .soundrack .pgroup {
+  break-inside: avoid;
+  margin-bottom: var(--sp-6);
+}
 /* The preset library is a browser, not a knob section: a full-width band at
    the top of the tab, its five genre columns side by side, so the whole
    set-list is visible at once instead of a tall tower that staggers the grid. */
@@ -381,16 +394,15 @@
   grid-column: 1 / -1;
 }
 .app__panels .presetlib {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: var(--sp-4) var(--sp-6);
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--sp-3) var(--sp-5);
 }
 .app__panels .presetcat {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  min-inline-size: 9rem;
 }
 .app__panels .presetcat + .presetcat {
   margin-top: 0;
@@ -398,9 +410,23 @@
 .app__panels .presetgrid {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-2);
+  gap: 6px;
+}
+/* Compact chips in the browser band so it doesn't eat the open drawer. */
+.app__panels .presetchip {
+  padding: 6px 12px;
+  min-height: 0;
 }
 /* Keep the four macro dials as a 2x2 block rather than a tall single column. */
 .app__panels .macropad {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+/* Compact segmented pickers (osc wave, glide/chord/arp mode) so all options sit
+   on one row inside a narrow rack column instead of wrapping (e.g. "Tri" alone). */
+.app__panels .segmented__row {
+  flex-wrap: nowrap;
+}
+.app__panels .segmented__opt {
+  min-height: 32px;
+  padding: 4px 7px;
 }

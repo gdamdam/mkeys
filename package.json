@@ -1,7 +1,7 @@
 {
   "name": "mkeys",
   "private": true,
-  "version": "0.4.5",
+  "version": "0.4.6",
   "license": "AGPL-3.0-or-later",
   "description": "Touch a note. Bend into the next. Never leave the scale. A local-first, scale-locked lead & melody instrument for the browser.",
   "type": "module",

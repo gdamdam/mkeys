@@ -131,8 +131,12 @@ export default function App() {
           {tab === 'sound' && (
             <>
               <PresetPicker />
-              <Macros />
-              <PatchPanel />
+              {/* Synth sections have very uneven heights; a masonry column flow
+                  packs them tightly instead of a staggered grid (see .soundrack). */}
+              <div className="soundrack">
+                <Macros />
+                <PatchPanel />
+              </div>
             </>
           )}
           {tab === 'perform' && <PerformancePanel />}
