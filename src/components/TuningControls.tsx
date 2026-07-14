@@ -87,8 +87,8 @@ export function TuningControls() {
 
   return (
     <div className="transport__block tuningstrip">
-      <Select label="Tuning" options={options} value={tuning ? tuning.name : TET_VALUE} onChange={onTuningChange} />
-      <div className="transport__row">
+      <div className="transport__row tuningstrip__row">
+        <Select label="Tuning" options={options} value={tuning ? tuning.name : TET_VALUE} onChange={onTuningChange} />
         <label className="tuningstrip__tonic">
           <span className="eyebrow">Tonic</span>
           <input

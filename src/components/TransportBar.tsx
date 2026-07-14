@@ -97,35 +97,6 @@ export function TransportBar() {
         />
       </div>
 
-      {/* key + scale */}
-      <div className="transport__block keystrip">
-        <Segmented
-          label="Key"
-          options={KEY_OPTIONS}
-          value={String(session.keyRoot)}
-          onChange={(v) => inst.setKeyRoot(Number(v) as PitchClass)}
-        />
-      </div>
-      <div
-        className="transport__block"
-        title={
-          tuned
-            ? 'Scale is set by the active tuning — the microtuning replaces the diatonic mode. Switch Tuning to 12-TET to use scales.'
-            : undefined
-        }
-      >
-        <Select
-          label="Scale"
-          options={MODE_OPTIONS}
-          value={session.mode}
-          disabled={tuned}
-          onChange={(m) => inst.setMode(m)}
-        />
-      </div>
-
-      {/* tuning — the third "which pitches" control; overrides Scale when active */}
-      <TuningControls />
-
       {/* tempo */}
       <div className="transport__block">
         <Slider
@@ -158,27 +129,9 @@ export function TransportBar() {
             onChange={() => inst.toggleLink()}
           />
         </div>
-        <div
-          className="transport__row"
-          title={
-            inst.mbusPublishing
-              ? 'Publishing the master output to the mbus patchbay (via the local link-bridge)'
-              : 'Publish the master output to the mbus patchbay (needs the local link-bridge; harmless without it)'
-          }
-        >
-          <span className={inst.mbusPublishing ? 'pill pill--live' : 'pill'}>
-            <span className="pill__dot" />
-            {inst.mbusPublishing ? 'bus on' : 'bus'}
-          </span>
-          <Toggle
-            aria-label="Publish to mbus"
-            checked={inst.mbusPublishing}
-            onChange={() => inst.toggleMbusPublish()}
-          />
-        </div>
       </div>
 
-      {/* MIDI */}
+      {/* MIDI + bus — everything that routes signal in or out lives here */}
       <div className="transport__block">
         {inst.midiReady ? (
           <div className="transport__row">
@@ -212,6 +165,24 @@ export function TransportBar() {
             Enable MIDI
           </button>
         )}
+        <div
+          className="transport__row"
+          title={
+            inst.mbusPublishing
+              ? 'Publishing the master output to the mbus patchbay (via the local link-bridge)'
+              : 'Publish the master output to the mbus patchbay (needs the local link-bridge; harmless without it)'
+          }
+        >
+          <span className={inst.mbusPublishing ? 'pill pill--live' : 'pill'}>
+            <span className="pill__dot" />
+            {inst.mbusPublishing ? 'bus on' : 'bus'}
+          </span>
+          <Toggle
+            aria-label="Publish to mbus"
+            checked={inst.mbusPublishing}
+            onChange={() => inst.toggleMbusPublish()}
+          />
+        </div>
       </div>
 
       {/* layout */}
@@ -223,6 +194,37 @@ export function TransportBar() {
           onChange={(l) => inst.setLayout(l)}
         />
       </div>
+
+      {/* Pitch strip — Key · Scale · Tuning as one musical row, directly above
+          the surface it configures. The break forces the wrap here so the strip
+          never splinters mid-group. */}
+      <div className="transport__break" aria-hidden="true" />
+      <div className="transport__block keystrip">
+        <Segmented
+          label="Key"
+          options={KEY_OPTIONS}
+          value={String(session.keyRoot)}
+          onChange={(v) => inst.setKeyRoot(Number(v) as PitchClass)}
+        />
+      </div>
+      <div
+        className="transport__block"
+        title={
+          tuned
+            ? 'Scale is set by the active tuning — the microtuning replaces the diatonic mode. Switch Tuning to 12-TET to use scales.'
+            : undefined
+        }
+      >
+        <Select
+          label="Scale"
+          options={MODE_OPTIONS}
+          value={session.mode}
+          disabled={tuned}
+          onChange={(m) => inst.setMode(m)}
+        />
+      </div>
+      {/* tuning — the third "which pitches" control; overrides Scale when active */}
+      <TuningControls />
     </div>
   )
 }
