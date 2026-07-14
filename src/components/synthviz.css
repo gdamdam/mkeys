@@ -1,0 +1,50 @@
+/*
+ * synthviz.css — styling for the live synth diagrams (see synthviz.tsx). The
+ * diagrams sit in a quiet inset "screen" so they read as displays, not controls.
+ */
+.synthviz {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-xs);
+  background: var(--ink);
+  box-shadow: inset 0 0 0 var(--line-w) var(--line);
+  /* the drawn colours */
+  --viz-line: var(--ember);
+  --viz-fill: var(--ember-wash);
+  --viz-axis: var(--haze-dim);
+}
+.synthviz--wave {
+  --viz-line: var(--ember);
+}
+
+/* Oscillator waveform preview: a short wide strip above the wave selector. */
+.psub__wave {
+  height: 30px;
+  margin-bottom: var(--sp-1);
+}
+/* Envelope / filter "screens" sit above their knob rows. */
+.section__viz {
+  max-width: 280px;
+  margin-bottom: var(--sp-2);
+}
+.synthviz__line {
+  stroke: var(--viz-line);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.synthviz__fill {
+  fill: var(--viz-fill);
+  stroke: none;
+}
+.synthviz__node {
+  fill: var(--viz-line);
+}
+.synthviz__axis {
+  stroke: var(--viz-axis);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  vector-effect: non-scaling-stroke;
+}

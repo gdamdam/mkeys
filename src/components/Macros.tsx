@@ -12,13 +12,14 @@ interface MacroDef {
   key: keyof MacrosState
   label: string
   hint: string
+  help: string
 }
 
 const MACROS: readonly MacroDef[] = [
-  { key: 'glow', label: 'Glow', hint: 'warmth + body' },
-  { key: 'motion', label: 'Motion', hint: 'movement + sway' },
-  { key: 'air', label: 'Air', hint: 'space + shimmer' },
-  { key: 'grit', label: 'Grit', hint: 'drive + edge' },
+  { key: 'glow', label: 'Glow', hint: 'warmth + body', help: 'Warmth & body — opens the filter and rounds the low end for a fuller tone.' },
+  { key: 'motion', label: 'Motion', hint: 'movement + sway', help: 'Movement & sway — adds LFO motion and subtle drift so the sound breathes.' },
+  { key: 'air', label: 'Air', hint: 'space + shimmer', help: 'Space & shimmer — adds brightness and reverb air around the sound.' },
+  { key: 'grit', label: 'Grit', hint: 'drive + edge', help: 'Drive & edge — adds saturation and harmonic bite for a dirtier tone.' },
 ]
 
 const pct = (v: number): string => `${Math.round(v * 100)}`
@@ -31,10 +32,11 @@ export function Macros() {
     <section className="pgroup pgroup--macros">
       <span className="pgroup__title eyebrow">Macros</span>
       <div className="macropad">
-      {MACROS.map(({ key, label, hint }) => (
+      {MACROS.map(({ key, label, hint, help }) => (
         <div key={key} className="macrocell">
           <Knob
             label={label}
+            hint={help}
             unit="%"
             min={0}
             max={1}

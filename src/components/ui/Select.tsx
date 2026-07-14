@@ -29,6 +29,8 @@ export interface SelectProps<T extends string> {
   /** Shown when `value` matches no option. */
   placeholder?: string
   disabled?: boolean
+  /** Hover tooltip explaining what the control does. */
+  title?: string
   id?: string
   className?: string
 }
@@ -40,6 +42,7 @@ export function Select<T extends string>({
   label,
   placeholder = 'Select…',
   disabled = false,
+  title,
   id,
   className,
 }: SelectProps<T>) {
@@ -243,7 +246,7 @@ export function Select<T extends string>({
   }
 
   return (
-    <div className={cls} ref={rootRef}>
+    <div className={cls} ref={rootRef} title={title}>
       {label ? (
         <span className="select__label eyebrow" id={labelId}>
           {label}

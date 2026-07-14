@@ -7,6 +7,7 @@
 import { Knob, Segmented, Select, Toggle } from './ui'
 import type { SegmentedOption, SelectOption } from './ui'
 import { useInstrument } from '../app/useInstrument'
+import { EnvelopeGraph, FilterCurve, WaveformIcon } from './synthviz'
 import type {
   GlideParams,
   LfoParams,
@@ -14,6 +15,7 @@ import type {
   PatchParams,
 } from '../types'
 import './panels.css'
+import './synthviz.css'
 
 const WAVE_OPTIONS: ReadonlyArray<SegmentedOption<OscillatorParams['wave']>> = [
   { value: 'saw', label: 'Saw' },
@@ -62,6 +64,8 @@ export function PatchPanel() {
     return (
       <div className="psub">
         <span className="psub__label eyebrow">{label}</span>
+        {/* Live preview of the actual wave — pulse shows the PW knob's duty. */}
+        <WaveformIcon wave={osc.wave} pulseWidth={osc.pulseWidth ?? 0.5} className="psub__wave" />
         <Segmented
           label={`${label} wave`}
           hideLabel
@@ -72,6 +76,7 @@ export function PatchPanel() {
         <div className="pshelf">
           <Knob
             label="Detune"
+            hint="Fine pitch offset in cents. Small amounts thicken the tone against the other oscillator."
             unit="¢"
             min={-100}
             max={100}
@@ -81,6 +86,7 @@ export function PatchPanel() {
           />
           <Knob
             label="Level"
+            hint="How loud this oscillator is in the mix."
             unit="%"
             min={0}
             max={1}
@@ -90,6 +96,7 @@ export function PatchPanel() {
           />
           <Knob
             label="PW"
+            hint="Pulse width — the duty cycle of the pulse wave. Only affects the Pulse shape."
             unit="%"
             min={0}
             max={1}
@@ -99,6 +106,7 @@ export function PatchPanel() {
           />
           <Knob
             label="FM"
+            hint="Frequency modulation depth — the other oscillator modulates this pitch for metallic, bell-like timbres."
             unit="%"
             min={0}
             max={1}
@@ -108,6 +116,7 @@ export function PatchPanel() {
           />
           <Toggle
             label="Sync"
+            hint="hard-sync to the other osc"
             checked={osc.sync ?? false}
             onChange={(sync) => upd({ sync })}
           />
@@ -126,6 +135,7 @@ export function PatchPanel() {
         <div className="pshelf">
           <Knob
             label="Sub"
+            hint="Sub-oscillator level — a sine one octave below the note for extra weight and body."
             unit="%"
             min={0}
             max={1}
@@ -135,6 +145,7 @@ export function PatchPanel() {
           />
           <Knob
             label="Noise"
+            hint="White-noise level — adds breath and air, or a percussive edge to the attack."
             unit="%"
             min={0}
             max={1}
@@ -148,9 +159,16 @@ export function PatchPanel() {
       {/* Filter */}
       <section className="pgroup">
         <span className="pgroup__title eyebrow">Filter</span>
+        {/* Response curve: cutoff slides the knee, resonance raises the peak. */}
+        <FilterCurve
+          cutoff={patch.filter.cutoff}
+          resonance={patch.filter.resonance}
+          className="section__viz"
+        />
         <div className="pshelf">
           <Knob
             label="Cutoff"
+            hint="Cutoff frequency. Everything above it is progressively removed — lower it for a darker, muffled tone."
             unit="Hz"
             min={20}
             max={20000}
@@ -160,6 +178,7 @@ export function PatchPanel() {
           />
           <Knob
             label="Reso"
+            hint="Resonance. Emphasises frequencies right at the cutoff, adding a vocal, whistling peak."
             unit="%"
             min={0}
             max={1}
@@ -169,6 +188,7 @@ export function PatchPanel() {
           />
           <Knob
             label="Drive"
+            hint="Overdrive into the filter — adds harmonic grit and saturation."
             unit="%"
             min={0}
             max={1}
@@ -178,6 +198,7 @@ export function PatchPanel() {
           />
           <Knob
             label="Env amt"
+            hint="How much the filter envelope opens (or, when negative, closes) the cutoff over time."
             unit="%"
             min={-1}
             max={1}
@@ -187,6 +208,7 @@ export function PatchPanel() {
           />
           <Knob
             label="Keytrack"
+            hint="How much the cutoff follows the note pitch — higher notes open the filter further."
             unit="%"
             min={0}
             max={1}
@@ -203,20 +225,34 @@ export function PatchPanel() {
         <div className="pshelf">
           <div className="psub">
             <span className="psub__label eyebrow">Amp</span>
+            <EnvelopeGraph
+              attack={patch.ampEnv.attack}
+              decay={patch.ampEnv.decay}
+              sustain={patch.ampEnv.sustain}
+              release={patch.ampEnv.release}
+              className="section__viz"
+            />
             <div className="pshelf">
-              <Knob label="A" unit="s" min={0} max={4} value={patch.ampEnv.attack} format={secs} onChange={(attack) => set({ ampEnv: { ...patch.ampEnv, attack } })} />
-              <Knob label="D" unit="s" min={0} max={4} value={patch.ampEnv.decay} format={secs} onChange={(decay) => set({ ampEnv: { ...patch.ampEnv, decay } })} />
-              <Knob label="S" unit="%" min={0} max={1} value={patch.ampEnv.sustain} format={pct} onChange={(sustain) => set({ ampEnv: { ...patch.ampEnv, sustain } })} />
-              <Knob label="R" unit="s" min={0} max={4} value={patch.ampEnv.release} format={secs} onChange={(release) => set({ ampEnv: { ...patch.ampEnv, release } })} />
+              <Knob label="A" hint="Attack — time to reach full volume after a note starts." unit="s" min={0} max={4} value={patch.ampEnv.attack} format={secs} onChange={(attack) => set({ ampEnv: { ...patch.ampEnv, attack } })} />
+              <Knob label="D" hint="Decay — time to fall from the peak down to the sustain level." unit="s" min={0} max={4} value={patch.ampEnv.decay} format={secs} onChange={(decay) => set({ ampEnv: { ...patch.ampEnv, decay } })} />
+              <Knob label="S" hint="Sustain — the held volume level while the note stays down." unit="%" min={0} max={1} value={patch.ampEnv.sustain} format={pct} onChange={(sustain) => set({ ampEnv: { ...patch.ampEnv, sustain } })} />
+              <Knob label="R" hint="Release — time to fade to silence after the note is let go." unit="s" min={0} max={4} value={patch.ampEnv.release} format={secs} onChange={(release) => set({ ampEnv: { ...patch.ampEnv, release } })} />
             </div>
           </div>
           <div className="psub">
             <span className="psub__label eyebrow">Filter</span>
+            <EnvelopeGraph
+              attack={patch.filterEnv.attack}
+              decay={patch.filterEnv.decay}
+              sustain={patch.filterEnv.sustain}
+              release={patch.filterEnv.release}
+              className="section__viz"
+            />
             <div className="pshelf">
-              <Knob label="A" unit="s" min={0} max={4} value={patch.filterEnv.attack} format={secs} onChange={(attack) => set({ filterEnv: { ...patch.filterEnv, attack } })} />
-              <Knob label="D" unit="s" min={0} max={4} value={patch.filterEnv.decay} format={secs} onChange={(decay) => set({ filterEnv: { ...patch.filterEnv, decay } })} />
-              <Knob label="S" unit="%" min={0} max={1} value={patch.filterEnv.sustain} format={pct} onChange={(sustain) => set({ filterEnv: { ...patch.filterEnv, sustain } })} />
-              <Knob label="R" unit="s" min={0} max={4} value={patch.filterEnv.release} format={secs} onChange={(release) => set({ filterEnv: { ...patch.filterEnv, release } })} />
+              <Knob label="A" hint="Attack — time for the filter envelope to rise to its peak." unit="s" min={0} max={4} value={patch.filterEnv.attack} format={secs} onChange={(attack) => set({ filterEnv: { ...patch.filterEnv, attack } })} />
+              <Knob label="D" hint="Decay — time for the filter envelope to fall to its sustain level." unit="s" min={0} max={4} value={patch.filterEnv.decay} format={secs} onChange={(decay) => set({ filterEnv: { ...patch.filterEnv, decay } })} />
+              <Knob label="S" hint="Sustain — the held filter-envelope level while the note is down." unit="%" min={0} max={1} value={patch.filterEnv.sustain} format={pct} onChange={(sustain) => set({ filterEnv: { ...patch.filterEnv, sustain } })} />
+              <Knob label="R" hint="Release — time for the filter envelope to fall after the note is let go." unit="s" min={0} max={4} value={patch.filterEnv.release} format={secs} onChange={(release) => set({ filterEnv: { ...patch.filterEnv, release } })} />
             </div>
           </div>
         </div>
@@ -225,9 +261,12 @@ export function PatchPanel() {
       {/* LFO */}
       <section className="pgroup">
         <span className="pgroup__title eyebrow">LFO</span>
+        {/* A sine, cycling faster/slower with Rate — the modulation shape. */}
+        <WaveformIcon wave="sine" className="psub__wave" />
         <div className="pshelf">
           <Knob
             label="Rate"
+            hint="LFO speed in Hz — how fast the modulation cycles. Disabled when tempo-synced."
             unit="Hz"
             min={0.01}
             max={20}
@@ -239,6 +278,7 @@ export function PatchPanel() {
           />
           <Knob
             label="Depth"
+            hint="How strongly the LFO modulates its target."
             unit="%"
             min={0}
             max={1}
@@ -248,17 +288,20 @@ export function PatchPanel() {
           />
           <Select
             label="Target"
+            title="What the LFO modulates — Pitch (vibrato), Filter (wobble), or Amp (tremolo)."
             options={LFO_TARGETS}
             value={patch.lfo.target}
             onChange={(target) => set({ lfo: { ...patch.lfo, target } })}
           />
           <Toggle
             label="Tempo sync"
+            hint="lock rate to tempo"
             checked={patch.lfo.tempoSync}
             onChange={(tempoSync) => set({ lfo: { ...patch.lfo, tempoSync } })}
           />
           <Select
             label="Division"
+            title="Tempo-synced LFO rate, as a note division of the beat."
             options={DIVISIONS}
             value={String(patch.lfo.division ?? 4)}
             disabled={!patch.lfo.tempoSync}
@@ -274,18 +317,19 @@ export function PatchPanel() {
           <div className="psub">
             <span className="psub__label eyebrow">Unison</span>
             <div className="pshelf">
-              <Knob label="Voices" min={1} max={8} step={1} value={patch.unison.voices} format={(v) => `${Math.round(v)}`} onChange={(voices) => set({ unison: { ...patch.unison, voices: Math.round(voices) } })} />
-              <Knob label="Detune" unit="%" min={0} max={1} value={patch.unison.detune} format={pct} onChange={(detune) => set({ unison: { ...patch.unison, detune } })} />
-              <Knob label="Spread" unit="%" min={0} max={1} value={patch.unison.spread} format={pct} onChange={(spread) => set({ unison: { ...patch.unison, spread } })} />
+              <Knob label="Voices" hint="Number of stacked, detuned copies played per note — more voices sound thicker and wider." min={1} max={8} step={1} value={patch.unison.voices} format={(v) => `${Math.round(v)}`} onChange={(voices) => set({ unison: { ...patch.unison, voices: Math.round(voices) } })} />
+              <Knob label="Detune" hint="How far apart the unison voices are tuned — more detune, richer chorus." unit="%" min={0} max={1} value={patch.unison.detune} format={pct} onChange={(detune) => set({ unison: { ...patch.unison, detune } })} />
+              <Knob label="Spread" hint="Stereo width of the unison voices across the panorama." unit="%" min={0} max={1} value={patch.unison.spread} format={pct} onChange={(spread) => set({ unison: { ...patch.unison, spread } })} />
             </div>
           </div>
           <div className="psub">
             <span className="psub__label eyebrow">Glide</span>
             <div className="pshelf">
-              <Knob label="Time" unit="s" min={0} max={1} value={patch.glide.time} format={secs} onChange={(time) => set({ glide: { ...patch.glide, time } })} />
+              <Knob label="Time" hint="Portamento time — how long the pitch slides from one note to the next." unit="s" min={0} max={1} value={patch.glide.time} format={secs} onChange={(time) => set({ glide: { ...patch.glide, time } })} />
               <Segmented
                 label="Glide mode"
                 hideLabel
+                title="Legato: glide only when notes overlap. Always: glide on every note. Off: no glide."
                 options={GLIDE_MODES}
                 value={patch.glide.mode}
                 onChange={(mode) => set({ glide: { ...patch.glide, mode } })}
@@ -294,6 +338,7 @@ export function PatchPanel() {
           </div>
           <Knob
             label="Volume"
+            hint="Overall output level of this patch."
             unit="%"
             min={0}
             max={1}

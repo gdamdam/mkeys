@@ -34,7 +34,7 @@ export function Toggle({
   const cls = ['toggle', disabled ? 'is-disabled' : '', className].filter(Boolean).join(' ')
 
   return (
-    <div className={cls}>
+    <div className={cls} title={hint}>
       {label ? (
         <span className="toggle__text" id={`${labelId}-label`}>
           <span className="toggle__label">{label}</span>

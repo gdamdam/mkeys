@@ -19,6 +19,8 @@ export interface KnobProps {
   onChange: (value: number) => void
   /** Visible label (also the accessible name). */
   label: string
+  /** Hover tooltip explaining what the control does. */
+  hint?: string
   /** Unit shown after the value (e.g. "Hz", "%"). */
   unit?: string
   /** Format the numeric readout + aria-valuetext. Defaults to rounded value. */
@@ -64,6 +66,7 @@ export function Knob({
   step,
   onChange,
   label,
+  hint,
   unit,
   format,
   size = 56,
@@ -185,13 +188,14 @@ export function Knob({
   const cls = ['knob', disabled ? 'is-disabled' : '', className].filter(Boolean).join(' ')
 
   return (
-    <div className={cls}>
+    <div className={cls} title={hint}>
       <div
         ref={dialRef}
         className="knob__dial touch-none"
         role="slider"
         tabIndex={disabled ? -1 : 0}
         aria-label={label}
+        aria-description={hint}
         aria-valuemin={min}
         aria-valuemax={max}
         aria-valuenow={value}

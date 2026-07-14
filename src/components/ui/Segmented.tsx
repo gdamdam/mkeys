@@ -28,6 +28,8 @@ export interface SegmentedProps<T extends string> {
   disabled?: boolean
   /** Radio group name; auto-generated if omitted. */
   name?: string
+  /** Hover tooltip explaining what the control does. */
+  title?: string
   className?: string
 }
 
@@ -39,6 +41,7 @@ export function Segmented<T extends string>({
   hideLabel = false,
   disabled = false,
   name,
+  title,
   className,
 }: SegmentedProps<T>) {
   const autoName = useId()
@@ -46,7 +49,7 @@ export function Segmented<T extends string>({
   const cls = ['segmented', disabled ? 'is-disabled' : '', className].filter(Boolean).join(' ')
 
   return (
-    <fieldset className={cls} disabled={disabled}>
+    <fieldset className={cls} disabled={disabled} title={title}>
       <legend className={hideLabel ? 'sr-only' : 'segmented__legend eyebrow'}>{label}</legend>
       <div className="segmented__row" role="presentation">
         {options.map((opt) => {
