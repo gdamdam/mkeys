@@ -97,20 +97,21 @@ export function TransportBar() {
         />
       </div>
 
-      {/* tempo */}
+      {/* tempo — slider with Tap/Link inline (bottom-aligned to the track) so the
+          block is the same height as Master/Gain instead of dangling a 2nd row */}
       <div className="transport__block">
-        <Slider
-          label="Tempo"
-          min={40}
-          max={240}
-          step={1}
-          value={inst.bpm}
-          unit="bpm"
-          disabled={linkDrivesTempo}
-          format={() => Math.round(inst.effectiveBpm)}
-          onChange={(v) => inst.setBpm(v)}
-        />
-        <div className="transport__row">
+        <div className="transport__row transport__tempo">
+          <Slider
+            label="Tempo"
+            min={40}
+            max={240}
+            step={1}
+            value={inst.bpm}
+            unit="bpm"
+            disabled={linkDrivesTempo}
+            format={() => Math.round(inst.effectiveBpm)}
+            onChange={(v) => inst.setBpm(v)}
+          />
           <button
             type="button"
             className="pbtn"

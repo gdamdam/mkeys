@@ -136,6 +136,16 @@
   min-width: 116px;
 }
 
+/* Tempo row: Tap / Link sit bottom-aligned to the slider track (whose label
+   floats above), so the whole block is one slider tall like Master/Gain. */
+.transport__tempo {
+  align-items: flex-end;
+  flex-wrap: nowrap;
+}
+.transport__tempo .slider {
+  min-width: 150px;
+}
+
 /* pin the last engine block (Layout) to the right edge to bookend the row */
 .transport__block--end {
   margin-left: auto;
