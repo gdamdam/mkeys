@@ -52,6 +52,9 @@ export function TransportBar() {
   const inst = useInstrument()
   const { session, link } = inst
   const linkDrivesTempo = link.enabled && link.connected
+  // A microtuning replaces the pitch palette outright, so the diatonic mode is
+  // bypassed (see harmony/tuning.ts). Disable Scale to make that legible.
+  const tuned = session.tuning != null
 
   let linkPill: { text: string; cls: string }
   if (!link.enabled) linkPill = { text: 'Link off', cls: 'pill' }
@@ -103,11 +106,19 @@ export function TransportBar() {
           onChange={(v) => inst.setKeyRoot(Number(v) as PitchClass)}
         />
       </div>
-      <div className="transport__block">
+      <div
+        className="transport__block"
+        title={
+          tuned
+            ? 'Scale is set by the active tuning — the microtuning replaces the diatonic mode. Switch Tuning to 12-TET to use scales.'
+            : undefined
+        }
+      >
         <Select
           label="Scale"
           options={MODE_OPTIONS}
           value={session.mode}
+          disabled={tuned}
           onChange={(m) => inst.setMode(m)}
         />
       </div>
