@@ -21,7 +21,9 @@ export function PresetPicker() {
   const current = inst.session.presetName
 
   return (
-    <div className="presetlib">
+    <section className="pgroup pgroup--presets">
+      <span className="pgroup__title eyebrow">Presets</span>
+      <div className="presetlib">
       {PRESET_CATEGORIES.map((cat) => {
         const items = PRESETS.filter((p) => p.category === cat)
         if (items.length === 0) return null
@@ -44,6 +46,7 @@ export function PresetPicker() {
           </section>
         )
       })}
-    </div>
+      </div>
+    </section>
   )
 }

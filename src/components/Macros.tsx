@@ -28,7 +28,9 @@ export function Macros() {
   const macros = inst.session.macros
 
   return (
-    <div className="macropad">
+    <section className="pgroup pgroup--macros">
+      <span className="pgroup__title eyebrow">Macros</span>
+      <div className="macropad">
       {MACROS.map(({ key, label, hint }) => (
         <div key={key} className="macrocell">
           <Knob
@@ -44,6 +46,7 @@ export function Macros() {
           <span className="sessionrow__meta">{hint}</span>
         </div>
       ))}
-    </div>
+      </div>
+    </section>
   )
 }

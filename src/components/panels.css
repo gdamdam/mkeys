@@ -358,44 +358,33 @@
   animation: pill-pulse 1.2s ease-in-out infinite;
 }
 
-/* --- bottom-dock module flow ----------------------------------------------
-   The control drawer docks to the bottom of the window, so a tab's groups sit
-   side by side (hairline-separated columns) instead of one long narrow stack.
-   Scoped to .app__panels and appended last so it wins over the stacked-layout
-   rules above. */
+/* --- bottom-dock device rack ----------------------------------------------
+   Each tab is a horizontal chain of titled sections (.pgroup). PatchPanel
+   bundles its five sections in a .pgroup-wrap; display:contents dissolves that
+   wrapper so every section is a first-class rack column, uniform with the
+   Presets/Macros/Perform/Session sections. Appended last so it wins over the
+   vertical-stack rules at the top of this file. */
 .app__panels .pgroup-wrap {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: var(--sp-4) 0;
+  display: contents;
 }
 .app__panels .pgroup {
-  flex: 0 1 auto;
-  min-inline-size: 11rem;
+  flex: 0 0 auto;
+  max-inline-size: 17rem;
+  /* reset the vertical-stack spacing/divider from the base .pgroup + .pgroup */
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+/* Sections whose content wants a wider column than the 17rem default. */
+.app__panels .pgroup--presets {
   max-inline-size: 26rem;
-  padding-inline: var(--sp-5);
-  border-inline-start: var(--line-w) solid var(--line);
 }
-.app__panels .pgroup:first-child {
-  padding-inline-start: 0;
-  border-inline-start: none;
-}
-.app__panels .pgroup + .pgroup {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
-}
-/* Direct panel modules that aren't pgroup-wraps: presets and macros become
-   width-bounded columns in the bottom bar. */
-.app__panels .presetlib {
-  flex: 0 1 34rem;
-  min-inline-size: 18rem;
-}
-.app__panels .presetlib .presetcat + .presetcat {
+.app__panels .presetcat + .presetcat {
   margin-top: var(--sp-3);
 }
-.app__panels .macropad {
-  flex: 0 0 auto;
-  padding-inline: var(--sp-5);
-  border-inline-start: var(--line-w) solid var(--line);
+/* Knob shelves inside a rack column wrap to a compact 2–3 across instead of
+   forcing the column to the full width of a single knob row. */
+.app__panels .pgroup > .pshelf,
+.app__panels .psub > .pshelf {
+  max-inline-size: 15rem;
 }

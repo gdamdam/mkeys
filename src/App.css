@@ -106,13 +106,17 @@
   background: var(--slate-2, var(--ink));
 }
 
-/* Panel modules flow horizontally across the bottom bar and wrap; the drawer
-   scrolls vertically only when a tab genuinely overflows two rows. */
+/* A tab reads as a device rack: titled sections in one horizontal chain,
+   scrolled sideways when the chain is longer than the window. No wrapping, so
+   sections never land at random widths/heights the way a flex-wrap grid does. */
 .app__panels {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: flex-start;
-  gap: 0.75rem 1.5rem;
+  gap: clamp(1rem, 2.5vw, 2rem);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.25rem;
 }
 
 /* Power-on gesture screen --------------------------------------------------- */
