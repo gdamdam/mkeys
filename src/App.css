@@ -189,6 +189,29 @@
    modules get the full window width to sit side by side, so navigating a tab
    is a glance instead of a long scroll in a narrow column. */
 
+/* Mobile / narrow: the fixed 3-row layout let the tall wrapping header consume
+   the whole screen, collapsing the 1fr stage so the playing surface vanished.
+   Cap the header and drawer heights (each scrolls internally) so the surface
+   always keeps a usable band. Desktop layout is untouched. */
+@media (max-width: 720px) {
+  .transport {
+    max-block-size: 32dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .app__stage {
+    /* Guarantee the surface a real height even with the drawer open. */
+    min-block-size: 34dvh;
+  }
+  .app__drawer.is-open {
+    max-block-size: 42dvh;
+  }
+  /* With chrome hidden the surface takes the whole screen below the header. */
+  .app--focus .app__stage {
+    min-block-size: 60dvh;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .poweron__start {
     transition: none;
