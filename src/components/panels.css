@@ -233,6 +233,18 @@
   background: var(--ember-wash);
 }
 
+/* Panic / all-notes-off — a clearly-marked safety control (§13). */
+.pbtn--panic {
+  border-color: var(--ember-dim);
+  color: var(--ember);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.pbtn--panic:hover:not(:disabled) {
+  border-color: var(--ember);
+  background: var(--ember-wash);
+}
+
 .pinput {
   appearance: none;
   flex: 1 1 auto;

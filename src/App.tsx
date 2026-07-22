@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useInstrument } from './app/useInstrument'
 import { useKeyboardPlay } from './app/useKeyboardPlay'
 import { Surface } from './components/Surface/Surface'
@@ -20,8 +20,30 @@ const TABS: ReadonlyArray<{ id: DrawerTab; label: string }> = [
 
 export default function App() {
   const instrument = useInstrument()
-  const { started, start } = instrument
+  const { started, start, panic } = instrument
   useKeyboardPlay(instrument)
+
+  // Global Panic / All-Notes-Off shortcut (§13). Escape is never a musical
+  // typing key, and we ignore it inside text fields, so it can neither fire
+  // mid-word nor collide with the QWERTY play rows.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape' || e.metaKey || e.ctrlKey || e.altKey) return
+      const t = e.target
+      if (
+        t instanceof HTMLElement &&
+        (t.tagName === 'INPUT' ||
+          t.tagName === 'TEXTAREA' ||
+          t.tagName === 'SELECT' ||
+          t.isContentEditable)
+      ) {
+        return
+      }
+      panic()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [panic])
 
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)

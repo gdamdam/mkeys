@@ -129,6 +129,19 @@ export function TransportBar() {
             checked={link.enabled}
             onChange={() => inst.toggleLink()}
           />
+          {/* Always-visible emergency stop (§13): silences every synth voice,
+              MIDI-out note, MPE/pitch-bend + sustain state, and STOPS the
+              arpeggiator and phrase playback. Reachable in normal and focus
+              modes (the transport strip is always shown). Shortcut: Esc. */}
+          <button
+            type="button"
+            className="pbtn pbtn--panic"
+            onClick={() => inst.panic()}
+            title="Panic — all notes off. Silences every voice and MIDI note and stops the arp + phrase. Shortcut: Esc"
+            aria-keyshortcuts="Escape"
+          >
+            Panic
+          </button>
         </div>
       </div>
 
