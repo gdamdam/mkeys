@@ -136,6 +136,13 @@ const uuid = (): string =>
 const nowSeconds = (): number =>
   typeof performance !== 'undefined' ? performance.now() / 1000 : Date.now() / 1000
 
+/**
+ * Composite key for a MIDI-input voice: `(channel, note)` (§3). Keying by note
+ * alone collides the same note played on two MPE member channels, so each
+ * source channel gets an independent voice, note-off, and pitch-bend.
+ */
+const midiInKey = (channel: number, note: number): string => `${channel}:${note}`
+
 /** A live logical voice (one played key), which may sound several engine notes. */
 interface VoiceRecord {
   id: number
@@ -144,6 +151,10 @@ interface VoiceRecord {
   baseMidi: number
   /** Expanded chord MIDI notes (parallel to {@link engineIds} for direct play). */
   midis: number[]
+  /** Resolved per-note frequencies (parallel to {@link midis}) when a tuning is active. */
+  freqs?: number[]
+  /** Note-on velocity (0..1) captured at press, so the voice can be re-sounded verbatim. */
+  vel: number
   /** Engine voice ids for direct play; empty when the voice is routed to the arp. */
   engineIds: number[]
   arp: boolean
@@ -186,10 +197,24 @@ class InstrumentStore {
   private readonly ownership = new NoteOwnership()
   /** Per-voice member-channel assignment for MPE output (§4, microtonal note-out). */
   private readonly mpeAlloc = new MpeAllocator()
-  private readonly midiInVoices = new Map<number, { vId: number; channel: number }>()
+  /**
+   * Live MIDI-input voices, keyed by `(channel, note)` (§3). `keyDown` tracks
+   * whether the physical key is still held; a sustain-deferred note stays in the
+   * map with `keyDown: false` until the pedal lifts (§4).
+   */
+  private readonly midiInVoices = new Map<
+    string,
+    { vId: number; channel: number; note: number; keyDown: boolean }
+  >()
   /** Latest pitch-bend per source channel, so MPE per-note bends stay independent. */
   private readonly midiBend = new Map<number, number>()
   private midiMod = 0
+  /**
+   * MIDI sustain pedal (CC64) state — distinct from the performance {@link latchOn}
+   * toggle (§4). While down, a MIDI-in note-off is deferred (the note keeps
+   * sounding) until the pedal lifts; re-striking a sustained note retriggers it.
+   */
+  private sustainOn = false
 
   private linkEnabledFlag = false
   private linkState: LinkState = getLinkState()
@@ -209,7 +234,13 @@ class InstrumentStore {
   private readonly voices = new Map<number, VoiceRecord>()
   private nextVoiceId = 1
   private nextEngineId = 1
-  private readonly pending = new Set<ReturnType<typeof setTimeout>>()
+  /**
+   * Phrase-playback lookahead timers (§6). Tracked apart from {@link arpPending}
+   * so Stop / Clear / Panic / record-start can cancel already-dispatched phrase
+   * note-ons — without this a callback planned up to one lookahead window ahead
+   * would still fire and start a note after the transport reported stopped.
+   */
+  private readonly phrasePending = new Set<ReturnType<typeof setTimeout>>()
   // Arp timers/notes are tracked apart from `pending` so stopping the arp can
   // cancel its still-scheduled note-ons and silence its sounding notes without
   // touching phrase playback.
@@ -361,6 +392,13 @@ class InstrumentStore {
 
       // Publish intent recorded before the engine existed (toggle pre-start).
       this.applyMbusPublish()
+
+      // Replay any notes pressed during startup (§8): a QWERTY/touch gesture is
+      // what STARTS audio, so its note-on reached a worklet that did not yet
+      // exist (engine calls are no-ops until running). Sound every still-held
+      // direct voice now. Keys already released mid-startup left no voice here,
+      // so nothing spurious sounds.
+      this.resyncDirectVoices()
 
       this.startedFlag = true
       this.emit()
@@ -696,6 +734,8 @@ class InstrumentStore {
       octave,
       baseMidi,
       midis,
+      freqs,
+      vel,
       engineIds: [],
       arp: useArp,
       fingerDown: true,
@@ -768,6 +808,23 @@ class InstrumentStore {
     }
   }
 
+  /**
+   * Re-issue engine note-ons for every live directly-played voice (§8). Used
+   * after audio starts so notes pressed during the async startup — whose
+   * note-ons hit a not-yet-existent worklet as no-ops — actually sound. MIDI is
+   * NOT re-sent (it was already gated on `midiAccess`, so nothing was lost there
+   * to duplicate). Arp/phrase voices are driven by their schedulers, not here.
+   */
+  private resyncDirectVoices(): void {
+    for (const v of this.voices.values()) {
+      if (v.arp) continue
+      for (let i = 0; i < v.engineIds.length; i++) {
+        this.engine.noteOn(v.engineIds[i], v.midis[i], v.vel, v.freqs?.[i])
+        this.engine.setExpression(v.engineIds[i], this.exprForNote(v.expr, v.midis[i], v.baseMidi))
+      }
+    }
+  }
+
   /** Flush every voice, timer and device — the single no-hung-notes guarantee. */
   private releaseAll(): void {
     for (const v of this.voices.values()) {
@@ -779,11 +836,16 @@ class InstrumentStore {
       }
     }
     this.voices.clear()
-    this.clearPending()
+    this.clearPhrasePending()
     this.stopArp()
     this.engine.panic()
     this.midiPanic()
     this.midiInVoices.clear()
+    // A hard flush drops any sustain hold and per-channel bend/mod so the next
+    // note starts from a clean expression state (§4, §13).
+    this.sustainOn = false
+    this.midiBend.clear()
+    this.midiMod = 0
     this.phraseVoiceIds.clear()
   }
 
@@ -810,18 +872,31 @@ class InstrumentStore {
     }
   }
 
-  private clearPending(): void {
-    for (const h of this.pending) clearTimeout(h)
-    this.pending.clear()
+  private clearPhrasePending(): void {
+    for (const h of this.phrasePending) clearTimeout(h)
+    this.phrasePending.clear()
   }
 
-  private scheduleAt(timeSec: number, fn: () => void): void {
+  private schedulePhraseAt(timeSec: number, fn: () => void): void {
     const delayMs = Math.max(0, (timeSec - this.ctxNow()) * 1000)
     const h = setTimeout(() => {
-      this.pending.delete(h)
+      this.phrasePending.delete(h)
       fn()
     }, delayMs)
-    this.pending.add(h)
+    this.phrasePending.add(h)
+  }
+
+  /**
+   * Halt phrase playback with no residue (§6): stop the scheduler so no new
+   * events are planned, cancel every already-dispatched lookahead callback, and
+   * release the currently sounding phrase voices. Leaves directly-played and
+   * arp voices untouched.
+   */
+  private stopPhrasePlayback(): void {
+    this.phraseScheduler.stop()
+    this.clearPhrasePending()
+    for (const id of [...this.phraseVoiceIds]) this.releaseVoice(id)
+    this.phraseVoiceIds.clear()
   }
 
   // ------------------------------------------------------------------ arp engine
@@ -877,7 +952,7 @@ class InstrumentStore {
     }
   }
 
-  /** Like {@link scheduleAt} but tracked in `arpPending` so `stopArp` can cancel it. */
+  /** Like {@link schedulePhraseAt} but tracked in `arpPending` so `stopArp` can cancel it. */
   private scheduleArpAt(timeSec: number, fn: () => void): void {
     const delayMs = Math.max(0, (timeSec - this.ctxNow()) * 1000)
     const h = setTimeout(() => {
@@ -942,10 +1017,9 @@ class InstrumentStore {
     }
     // If a phrase is playing, stop it first — otherwise the old loop keeps
     // sounding, bleeds into the take, and can no longer be stopped by Play/Stop.
+    // A full stop also cancels any lookahead callback so none fires into the take (§6).
     if (this.recorderState === 'playing') {
-      this.phraseScheduler.stop()
-      for (const id of [...this.phraseVoiceIds]) this.releaseVoice(id)
-      this.phraseVoiceIds.clear()
+      this.stopPhrasePlayback()
     }
     void this.ensureStarted()
     this.recordedEvents = []
@@ -956,9 +1030,7 @@ class InstrumentStore {
 
   togglePlayPhrase = (): void => {
     if (this.recorderState === 'playing') {
-      this.phraseScheduler.stop()
-      for (const id of [...this.phraseVoiceIds]) this.releaseVoice(id)
-      this.phraseVoiceIds.clear()
+      this.stopPhrasePlayback()
       this.recorderState = 'idle'
       this.emit()
       return
@@ -978,9 +1050,7 @@ class InstrumentStore {
   }
 
   clearPhrase = (): void => {
-    this.phraseScheduler.stop()
-    for (const id of [...this.phraseVoiceIds]) this.releaseVoice(id)
-    this.phraseVoiceIds.clear()
+    this.stopPhrasePlayback()
     this.session = { ...this.session, phrase: null }
     if (this.recorderState === 'playing') this.recorderState = 'idle'
     this.autosave()
@@ -1042,11 +1112,11 @@ class InstrumentStore {
       const meta = this.phraseTable[ev.note]
       if (!meta) continue
       const holder = { id: -1 }
-      this.scheduleAt(ev.time, () => {
+      this.schedulePhraseAt(ev.time, () => {
         holder.id = this.noteOnAt(meta.degree, meta.octave, meta.expr, { bypassLatch: true })
         this.phraseVoiceIds.add(holder.id)
       })
-      this.scheduleAt(ev.offTime, () => {
+      this.schedulePhraseAt(ev.offTime, () => {
         if (holder.id >= 0) {
           // Release directly (not noteOffVoice): phrase notes must always end,
           // even with latch on, so a loop replays instead of accumulating.
@@ -1181,10 +1251,16 @@ class InstrumentStore {
     if (!ev) return
     switch (ev.type) {
       case 'noteOn': {
-        // A repeated note-on for a still-held note (chatty controller or a
-        // dropped note-off) would otherwise orphan the previous voice.
-        const held = this.midiInVoices.get(ev.note)
-        if (held !== undefined) this.noteOffVoice(held.vId)
+        const key = midiInKey(ev.channel, ev.note)
+        // A repeated note-on for the SAME channel+note (chatty controller, a
+        // dropped note-off, or a re-strike while sustained) would otherwise
+        // orphan the previous voice. Hard-release it so this note-on retriggers
+        // cleanly (§4). Voices on other channels are untouched (§3, MPE).
+        const held = this.midiInVoices.get(key)
+        if (held !== undefined) {
+          this.releaseVoice(held.vId)
+          this.midiInVoices.delete(key)
+        }
         const cell = this.midiToCell(ev.note)
         // A `.kbm` may leave this key unmapped — sound nothing (§3-A).
         if (!cell) break
@@ -1197,14 +1273,21 @@ class InstrumentStore {
           timbre: this.midiMod,
           pressure: ev.velocity / 127,
         })
-        this.midiInVoices.set(ev.note, { vId, channel: ev.channel })
+        this.midiInVoices.set(key, { vId, channel: ev.channel, note: ev.note, keyDown: true })
         break
       }
       case 'noteOff': {
-        const held = this.midiInVoices.get(ev.note)
+        const key = midiInKey(ev.channel, ev.note)
+        const held = this.midiInVoices.get(key)
         if (held !== undefined) {
-          this.noteOffVoice(held.vId)
-          this.midiInVoices.delete(ev.note)
+          held.keyDown = false
+          // Sustain (CC64) down: defer the release — the note keeps sounding
+          // until the pedal lifts (§4). Only the exact channel+note voice is
+          // affected, never the same note on another MPE channel (§3).
+          if (!this.sustainOn) {
+            this.noteOffVoice(held.vId)
+            this.midiInVoices.delete(key)
+          }
         }
         break
       }
@@ -1218,7 +1301,8 @@ class InstrumentStore {
           this.midiMod = clamp01(ev.value / 127)
           this.applyMidiExpression()
         } else if (ev.kind === 'sustain') {
-          this.setLatch(ev.value >= 64)
+          // CC64 drives MIDI sustain, NOT the performance latch toggle (§4).
+          this.setSustain(ev.value >= 64)
         }
         break
       }
@@ -1248,6 +1332,25 @@ class InstrumentStore {
     // transpose incoming notes by (baseOctave − REFERENCE_OCTAVE) octaves.
     const octave = REFERENCE_OCTAVE + Math.floor(degree / len)
     return { index, octave }
+  }
+
+  /**
+   * MIDI sustain pedal (CC64), independent of the performance latch (§4). While
+   * down, MIDI-in note-offs are deferred. Lifting the pedal releases every voice
+   * whose physical key is already up; keys still held keep sounding. Sustain
+   * never touches {@link latchOn} or its UI toggle.
+   */
+  private setSustain(on: boolean): void {
+    if (on === this.sustainOn) return
+    this.sustainOn = on
+    if (on) return
+    // Pedal up: release the notes that were only being held by the pedal.
+    for (const [key, held] of [...this.midiInVoices]) {
+      if (!held.keyDown) {
+        this.noteOffVoice(held.vId)
+        this.midiInVoices.delete(key)
+      }
+    }
   }
 
   /** Fold the latest pitch-bend + mod-wheel into every MIDI-input voice. */

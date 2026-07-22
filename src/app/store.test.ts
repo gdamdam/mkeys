@@ -12,8 +12,11 @@ const JUST = BUILTIN_PORTABLE_TUNINGS.find((t) => /just/i.test(t.name)) ?? BUILT
  */
 interface StoreMidiPrivates {
   handleMidiIn(e: { data: Uint8Array }): void
-  midiInVoices: Map<number, { vId: number; channel: number }>
+  // Keyed by `${channel}:${note}` (§3), so the same note on two MPE channels is
+  // two independent voices.
+  midiInVoices: Map<string, { vId: number; channel: number; note: number; keyDown: boolean }>
   voices: Map<number, { baseMidi: number; expr: TouchExpression }>
+  sustainOn: boolean
   // MIDI-out injection points.
   midiAccess: unknown
   midiReadyFlag: boolean
@@ -52,8 +55,17 @@ function bend(channel: number, value: number): void {
   send(0xe0 | channel, raw & 0x7f, (raw >> 7) & 0x7f)
 }
 
-function voiceFor(note: number): { baseMidi: number; expr: TouchExpression } {
-  const held = priv.midiInVoices.get(note)
+function noteOff(channel: number, note: number, velocity = 0): void {
+  send(0x80 | channel, note, velocity)
+}
+
+/** Sustain pedal CC64: value >= 64 is "down". */
+function sustain(channel: number, down: boolean): void {
+  send(0xb0 | channel, 64, down ? 127 : 0)
+}
+
+function voiceFor(channel: number, note: number): { baseMidi: number; expr: TouchExpression } {
+  const held = priv.midiInVoices.get(`${channel}:${note}`)
   expect(held).toBeDefined()
   const v = priv.voices.get(held!.vId)
   expect(v).toBeDefined()
@@ -69,30 +81,139 @@ describe('MIDI-in pitch bend', () => {
   it('applies bend per channel so MPE voices stay independent', () => {
     noteOn(0, 60)
     noteOn(1, 64)
-    const a = voiceFor(60)
-    const b = voiceFor(64)
+    const a = voiceFor(0, 60)
+    const b = voiceFor(1, 64)
 
     bend(0, 1) // full up on channel 0 only: +2 semitones
 
-    expect(voiceFor(60).expr.pitch).toBeCloseTo(a.baseMidi + 2, 5)
+    expect(voiceFor(0, 60).expr.pitch).toBeCloseTo(a.baseMidi + 2, 5)
     // The channel-1 voice must not inherit channel 0's bend.
-    expect(voiceFor(64).expr.pitch).toBeCloseTo(b.baseMidi, 5)
+    expect(voiceFor(1, 64).expr.pitch).toBeCloseTo(b.baseMidi, 5)
   })
 
   it('bends every voice on single-channel input exactly as before', () => {
     noteOn(0, 60)
     noteOn(0, 64)
-    const a = voiceFor(60)
-    const b = voiceFor(64)
+    const a = voiceFor(0, 60)
+    const b = voiceFor(0, 64)
 
     bend(0, 0.5) // half up: +1 semitone, ±2 semitone range
 
-    expect(voiceFor(60).expr.pitch).toBeCloseTo(a.baseMidi + 1, 3)
-    expect(voiceFor(64).expr.pitch).toBeCloseTo(b.baseMidi + 1, 3)
+    expect(voiceFor(0, 60).expr.pitch).toBeCloseTo(a.baseMidi + 1, 3)
+    expect(voiceFor(0, 64).expr.pitch).toBeCloseTo(b.baseMidi + 1, 3)
 
     bend(0, 0) // back to centre restores the base pitch
-    expect(voiceFor(60).expr.pitch).toBeCloseTo(a.baseMidi, 5)
-    expect(voiceFor(64).expr.pitch).toBeCloseTo(b.baseMidi, 5)
+    expect(voiceFor(0, 60).expr.pitch).toBeCloseTo(a.baseMidi, 5)
+    expect(voiceFor(0, 64).expr.pitch).toBeCloseTo(b.baseMidi, 5)
+  })
+})
+
+describe('MIDI-in ownership by (channel, note) (§3)', () => {
+  beforeEach(() => {
+    instrumentStore.panic()
+    instrumentStore.setMidiConfig({ inEnabled: true, outEnabled: false, outChannel: 1, mpe: false })
+  })
+
+  it('the same note on two MPE channels makes two independent voices', () => {
+    noteOn(1, 60)
+    noteOn(2, 60)
+    expect(priv.midiInVoices.size).toBe(2)
+    const a = voiceFor(1, 60)
+    const b = voiceFor(2, 60)
+    expect(a).not.toBe(b)
+    expect(priv.voices.size).toBe(2)
+  })
+
+  it('a note-off releases only the matching channel voice', () => {
+    noteOn(1, 60)
+    noteOn(2, 60)
+    noteOff(1, 60)
+    expect(priv.midiInVoices.has('1:60')).toBe(false)
+    // The channel-2 voice on the same note must remain sounding.
+    expect(priv.midiInVoices.has('2:60')).toBe(true)
+    expect(priv.voices.size).toBe(1)
+  })
+
+  it('a repeated note-on replaces only the same channel/note voice', () => {
+    noteOn(1, 60)
+    const firstId = priv.midiInVoices.get('1:60')!.vId
+    noteOn(2, 60) // different channel — untouched
+    noteOn(1, 60) // re-strike same channel/note — retrigger (new voice id)
+    const secondId = priv.midiInVoices.get('1:60')!.vId
+    expect(secondId).not.toBe(firstId)
+    expect(priv.midiInVoices.has('2:60')).toBe(true)
+    expect(priv.voices.size).toBe(2)
+  })
+
+  it('a bend on one channel never leaks to the same note on another channel', () => {
+    noteOn(1, 60)
+    noteOn(2, 60)
+    const a = voiceFor(1, 60)
+    const b = voiceFor(2, 60)
+    bend(1, 1) // +2 semitones on channel 1 only
+    expect(voiceFor(1, 60).expr.pitch).toBeCloseTo(a.baseMidi + 2, 5)
+    expect(voiceFor(2, 60).expr.pitch).toBeCloseTo(b.baseMidi, 5)
+  })
+})
+
+describe('MIDI sustain vs performance latch (§4)', () => {
+  beforeEach(() => {
+    instrumentStore.panic()
+    instrumentStore.setLatch(false)
+    instrumentStore.setMidiConfig({ inEnabled: true, outEnabled: false, outChannel: 1, mpe: false })
+  })
+
+  it('does not toggle the user-facing latch control', () => {
+    sustain(0, true)
+    expect(instrumentStore.getSnapshot().latch).toBe(false)
+    expect(priv.sustainOn).toBe(true)
+    sustain(0, false)
+    expect(instrumentStore.getSnapshot().latch).toBe(false)
+  })
+
+  it('defers a note-off while the pedal is down, then releases on pedal up', () => {
+    noteOn(0, 60)
+    sustain(0, true)
+    noteOff(0, 60) // key released, pedal down → note keeps sounding
+    expect(priv.voices.size).toBe(1)
+    expect(priv.midiInVoices.get('0:60')!.keyDown).toBe(false)
+    sustain(0, false) // pedal up → the released key's note now stops
+    expect(priv.voices.size).toBe(0)
+    expect(priv.midiInVoices.size).toBe(0)
+  })
+
+  it('keeps notes whose key is still physically held when the pedal lifts', () => {
+    noteOn(0, 60)
+    noteOn(0, 64)
+    sustain(0, true)
+    noteOff(0, 60) // only 60's key released
+    sustain(0, false)
+    expect(priv.midiInVoices.has('0:60')).toBe(false) // released
+    expect(priv.midiInVoices.has('0:64')).toBe(true) // still held
+    expect(priv.voices.size).toBe(1)
+  })
+
+  it('retriggers (does not silence) when a sustained note is re-struck', () => {
+    noteOn(0, 60)
+    const firstId = priv.midiInVoices.get('0:60')!.vId
+    sustain(0, true)
+    noteOff(0, 60) // deferred — still sounding
+    noteOn(0, 60) // re-strike: must retrigger, not toggle-off
+    const held = priv.midiInVoices.get('0:60')
+    expect(held).toBeDefined()
+    expect(held!.vId).not.toBe(firstId)
+    expect(held!.keyDown).toBe(true)
+    expect(priv.voices.size).toBe(1)
+  })
+
+  it('panic clears sustain state', () => {
+    noteOn(0, 60)
+    sustain(0, true)
+    noteOff(0, 60)
+    instrumentStore.panic()
+    expect(priv.sustainOn).toBe(false)
+    expect(priv.midiInVoices.size).toBe(0)
+    expect(priv.voices.size).toBe(0)
   })
 })
 
