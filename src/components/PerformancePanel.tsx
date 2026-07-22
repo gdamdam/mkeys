@@ -19,8 +19,29 @@ import {
 } from './ui'
 import type { SegmentedOption, SelectOption } from './ui'
 import { useInstrument } from '../app/useInstrument'
-import type { ArpConfig, ChordMode } from '../types'
+import type { ArpConfig, ChordMode, PlayGrid, PlayTimingMode } from '../types'
 import './panels.css'
+
+const TIMING_MODES: ReadonlyArray<SegmentedOption<PlayTimingMode>> = [
+  { value: 'immediate', label: 'Immediate' },
+  { value: 'recording', label: 'Quantized rec' },
+  { value: 'live', label: 'Quantized live' },
+]
+
+const PLAY_GRID_OPTIONS: ReadonlyArray<SelectOption<PlayGrid>> = [
+  { value: 'off', label: 'Off' },
+  { value: '1/16', label: '1/16' },
+  { value: '1/8', label: '1/8' },
+  { value: '1/4', label: '1/4' },
+  { value: 'beat', label: 'Beat' },
+  { value: 'bar', label: 'Bar' },
+]
+
+const TIMING_HELP: Record<PlayTimingMode, string> = {
+  immediate: 'Notes sound the instant you play them.',
+  recording: 'Monitoring stays live; captured phrase notes snap to the grid. Best for tight loops.',
+  live: 'Notes wait for the next grid boundary before sounding — play ahead of the beat.',
+}
 
 const ARP_MODES: ReadonlyArray<SegmentedOption<ArpConfig['mode']>> = [
   { value: 'up', label: 'Up' },
@@ -52,6 +73,7 @@ export function PerformancePanel() {
   const inst = useInstrument()
   const arp = inst.session.arp
   const surface = inst.session.surface
+  const pq = inst.session.playQuantize
   const { recorder } = inst
 
   const setArp = (p: Partial<ArpConfig>): void => inst.setArp({ ...arp, ...p })
@@ -136,6 +158,31 @@ export function PerformancePanel() {
           checked={inst.latch}
           onChange={(on) => inst.setLatch(on)}
         />
+      </section>
+
+      {/* Play quantize (§24) — TIMING of notes on the musical grid. Distinct from
+          the Glide quantize below, which shapes PITCH movement between degrees. */}
+      <section className="pgroup">
+        <span className="pgroup__title eyebrow">Play quantize</span>
+        <Segmented
+          label="Timing"
+          options={TIMING_MODES}
+          value={pq.mode}
+          onChange={(mode) => inst.setPlayQuantize({ ...pq, mode })}
+        />
+        <div className="pshelf">
+          <Select
+            label="Grid"
+            options={PLAY_GRID_OPTIONS}
+            value={pq.grid}
+            // Immediate mode ignores the grid entirely, so disable it there.
+            disabled={pq.mode === 'immediate'}
+            onChange={(grid) => inst.setPlayQuantize({ ...pq, grid })}
+          />
+        </div>
+        <p className="pempty" style={{ margin: '2px 0 0' }}>
+          {TIMING_HELP[pq.mode]}
+        </p>
       </section>
 
       {/* Playing surface — glide quantize (advertised 0–100%) + advanced geometry */}

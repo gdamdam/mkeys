@@ -37,6 +37,31 @@ describe('stored BPM (§10)', () => {
   })
 })
 
+describe('play quantize (§24)', () => {
+  it('defaults to immediate / off (old sessions)', () => {
+    expect(defaultSession().playQuantize).toEqual({ mode: 'immediate', grid: 'off' })
+    expect(sanitizeSession({}).playQuantize).toEqual({ mode: 'immediate', grid: 'off' })
+    expect(migrateSession({ root: 0 }).playQuantize).toEqual({ mode: 'immediate', grid: 'off' })
+  })
+  it('preserves valid mode + grid and rejects invalid ones', () => {
+    expect(sanitizeSession({ playQuantize: { mode: 'live', grid: '1/8' } }).playQuantize).toEqual({
+      mode: 'live',
+      grid: '1/8',
+    })
+    expect(sanitizeSession({ playQuantize: { mode: 'nope', grid: 'huge' } }).playQuantize).toEqual({
+      mode: 'immediate',
+      grid: 'off',
+    })
+  })
+  it('survives a JSON round-trip', () => {
+    const s: Session = { ...defaultSession(), playQuantize: { mode: 'recording', grid: 'bar' } }
+    expect(importSessionJSON(exportSessionJSON(s))?.playQuantize).toEqual({
+      mode: 'recording',
+      grid: 'bar',
+    })
+  })
+})
+
 describe('phrase-event identity (§17)', () => {
   it('preserves a finite integer id and drops a malformed one', () => {
     const s = sanitizeSession({

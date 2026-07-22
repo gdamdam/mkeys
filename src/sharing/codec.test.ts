@@ -31,6 +31,21 @@ function makeSession(overrides: Partial<Session> = {}): Session {
   return sanitizeSession({ ...base, ...overrides })
 }
 
+describe('play quantize in share links (§24)', () => {
+  it('round-trips timing mode + grid', () => {
+    const s = makeSession({ playQuantize: { mode: 'live', grid: '1/16' } })
+    const back = decodeSession(encodeSession(s))
+    expect(back?.playQuantize).toEqual({ mode: 'live', grid: '1/16' })
+  })
+  it('an old payload without pq decodes to immediate / off', () => {
+    const s = makeSession({ playQuantize: { mode: 'recording', grid: 'bar' } })
+    const compact = JSON.parse(decodeWire(encodeSession(s))) as Record<string, unknown>
+    delete compact.pq
+    const back = decodeSession(b64(compact))
+    expect(back?.playQuantize).toEqual({ mode: 'immediate', grid: 'off' })
+  })
+})
+
 describe('phrase-event identity in share links (§17)', () => {
   it('round-trips stable captured-voice ids', () => {
     const s = makeSession({

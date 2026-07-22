@@ -73,7 +73,7 @@ const readPressure = (e: ReactPointerEvent): number =>
 
 export function Surface({ className }: SurfaceProps) {
   const instrument = useInstrument()
-  const { grid, activeVoices } = instrument
+  const { grid, activeVoices, pendingNotes } = instrument
   // Same effective geometry the store built `grid` from (piano = one row), so
   // hit-testing and the CSS grid template always match the cells.
   const surface = effectiveSurface(instrument.session.surface)
@@ -110,6 +110,10 @@ export function Surface({ className }: SurfaceProps) {
   // MIDI notes currently sounding, for pad highlight.
   const sounding = new Set<number>()
   for (const v of activeVoices.values()) sounding.add(v.midi)
+  // Notes pressed but awaiting a quantized-live grid boundary (§24): a distinct
+  // pending highlight tells the performer their press registered.
+  const pending = new Set<number>()
+  for (const v of pendingNotes.values()) pending.add(v.midi)
 
   /** Normalised (0..1) pointer position within the surface, or null. */
   const coords = (e: ReactPointerEvent): { x: number; y: number } | null => {
@@ -266,10 +270,12 @@ export function Surface({ className }: SurfaceProps) {
       {rowOrder.map((r) =>
         grid[r].map((cell, c) => {
           const active = sounding.has(cell.midi)
+          const isPending = !active && pending.has(cell.midi)
           const cls = [
             'surface__pad',
             cell.isTonic ? 'is-tonic' : '',
             active ? 'is-active' : '',
+            isPending ? 'is-pending' : '',
           ]
             .filter(Boolean)
             .join(' ')

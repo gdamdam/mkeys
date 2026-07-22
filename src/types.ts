@@ -16,6 +16,8 @@ export type { PortableTuning } from './vendor/tuning-core/model'
 import type { PortableTuning } from './vendor/tuning-core/model'
 export type { KeyboardMap } from './harmony/tuning'
 import type { KeyboardMap } from './harmony/tuning'
+export type { PlayQuantizeConfig, PlayTimingMode, PlayGrid } from './transport/playQuantize'
+import type { PlayQuantizeConfig } from './transport/playQuantize'
 
 /** A pitch class 0–11 (0 = C, 1 = C#/Db, ... 11 = B). */
 export type PitchClass = number
@@ -318,6 +320,11 @@ export interface Session {
   arp: ArpConfig
   chordMode: ChordMode
   midi: MidiConfig
+  /**
+   * Play-quantize (timing) settings (§24) — distinct from `surface.quantize`
+   * (glide/pitch). Additive: payloads predating it default to Immediate / Off.
+   */
+  playQuantize: PlayQuantizeConfig
   phrase: Phrase | null
   presetName?: string
 }

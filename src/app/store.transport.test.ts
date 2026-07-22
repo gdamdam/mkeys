@@ -109,6 +109,10 @@ interface StorePrivates {
   recordAnchorCtx: number
   recordAnchorBeat: number
   recordBpm: number
+  bpm: number
+  playAnchorSec: number
+  playAnchorBpm: number
+  pendingVoices: Map<number, { expr: TouchExpression }>
   phraseTable: Array<{ degree: number; octave: number; expr: TouchExpression }>
   phrasePending: Set<unknown>
   phraseVoiceIds: Set<number>
@@ -201,6 +205,116 @@ describe('§6 phrase lookahead cancellation', () => {
     vi.advanceTimersByTime(1000)
     // No stray playback voice bled into the take.
     expect(priv.phraseVoiceIds.size).toBe(0)
+  })
+})
+
+describe('§24 play quantize — quantized live', () => {
+  // Deterministic clock + local phase anchor: 120 BPM (0.5 s/beat), beat grid.
+  let clock = 0
+  beforeEach(() => {
+    vi.useFakeTimers()
+    instrumentStore.panic()
+    priv.startedFlag = true
+    priv.startPromise = Promise.resolve()
+    clock = 0
+    priv.ctxNow = () => clock
+    priv.bpm = 120
+    priv.playAnchorSec = 0
+    priv.playAnchorBpm = 120
+    instrumentStore.setPlayQuantize({ mode: 'live', grid: 'beat' })
+  })
+  afterEach(() => vi.useRealTimers())
+
+  it('defers a press to the next boundary, then sounds it', () => {
+    clock = 0.25 // beatNow 0.5 → next beat boundary at 0.5s (250 ms away)
+    const id = priv.noteOnAt(0, 4, EXPR)
+    expect(typeof id).toBe('number')
+    expect(priv.pendingVoices.size).toBe(1)
+    expect(priv.voices.size).toBe(0)
+    expect(instrumentStore.getSnapshot().pendingNotes.size).toBe(1)
+
+    vi.advanceTimersByTime(300)
+    expect(priv.pendingVoices.size).toBe(0)
+    expect(priv.voices.size).toBe(1)
+  })
+
+  it('a press exactly on a boundary sounds immediately (no forced wait)', () => {
+    clock = 0 // beatNow 0 → on a boundary → delay 0
+    priv.noteOnAt(0, 4, EXPR)
+    vi.advanceTimersByTime(0)
+    expect(priv.voices.size).toBe(1)
+  })
+
+  it('multiple presses quantize to the same boundary and sound together', () => {
+    clock = 0.25
+    priv.noteOnAt(0, 4, EXPR)
+    priv.noteOnAt(2, 4, EXPR)
+    priv.noteOnAt(4, 4, EXPR)
+    expect(priv.pendingVoices.size).toBe(3)
+    vi.advanceTimersByTime(300)
+    expect(priv.voices.size).toBe(3)
+  })
+
+  it('early release cancels a pending note — nothing sounds', () => {
+    clock = 0.25
+    const id = priv.noteOnAt(0, 4, EXPR)
+    instrumentStore.noteOffVoice(id) // released before onset
+    expect(priv.pendingVoices.size).toBe(0)
+    vi.advanceTimersByTime(300)
+    expect(priv.voices.size).toBe(0)
+  })
+
+  it('expression changes before onset are applied when the note sounds', () => {
+    clock = 0.25
+    const id = priv.noteOnAt(0, 4, EXPR)
+    const moved = { ...EXPR, timbre: 0.9 }
+    instrumentStore.moveVoice(id, moved)
+    vi.advanceTimersByTime(300)
+    const v = priv.voices.get(id) as { expr: TouchExpression } | undefined
+    expect(v?.expr.timbre).toBe(0.9)
+  })
+
+  it('Panic cancels pending onsets', () => {
+    clock = 0.25
+    priv.noteOnAt(0, 4, EXPR)
+    instrumentStore.panic()
+    expect(priv.pendingVoices.size).toBe(0)
+    vi.advanceTimersByTime(300)
+    expect(priv.voices.size).toBe(0)
+  })
+
+  it('does not double-quantize when the arpeggiator is on (plays immediately)', () => {
+    instrumentStore.setArp({ ...instrumentStore.getSnapshot().session.arp, enabled: true })
+    clock = 0.25
+    priv.noteOnAt(0, 4, EXPR)
+    expect(priv.pendingVoices.size).toBe(0)
+    expect(priv.voices.size).toBe(1) // routed straight to the (already-quantized) arp
+    instrumentStore.setArp({ ...instrumentStore.getSnapshot().session.arp, enabled: false })
+  })
+})
+
+describe('§24 play quantize — quantized recording snap', () => {
+  let clock = 0
+  beforeEach(() => {
+    instrumentStore.panic()
+    priv.recorderState = 'idle'
+    priv.startedFlag = true
+    priv.startPromise = Promise.resolve()
+    clock = 0
+    priv.ctxNow = () => clock
+    instrumentStore.setBpm(120)
+    instrumentStore.setPlayQuantize({ mode: 'recording', grid: 'beat' })
+  })
+
+  it('snaps captured event beats to the grid while monitoring immediately', () => {
+    instrumentStore.toggleRecordPhrase() // anchor at 0, 120 BPM
+    // A press at 0.6 beats (0.3 s) captures — snaps to beat 1.
+    clock = 0.3
+    priv.noteOnAt(0, 4, EXPR)
+    // Monitoring is immediate in recording mode — the voice sounds now.
+    expect(priv.voices.size).toBe(1)
+    const ons = priv.recordedEvents.filter((e) => e.type === 'on')
+    expect(ons[0].time).toBeCloseTo(1, 5) // snapped from 0.6 → 1
   })
 })
 

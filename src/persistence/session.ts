@@ -20,6 +20,8 @@ import {
   clampName,
 } from '../limits'
 import { isValidTuning, normalizeTuning } from '../vendor/tuning-core/model'
+import { PLAY_GRIDS, PLAY_TIMING_MODES } from '../transport/playQuantize'
+import type { PlayGrid, PlayQuantizeConfig, PlayTimingMode } from '../transport/playQuantize'
 import type {
   ArpConfig,
   ChordMode,
@@ -175,6 +177,7 @@ export function defaultSession(): Session {
       outChannel: 1,
       mpe: false,
     },
+    playQuantize: { mode: 'immediate', grid: 'off' },
     phrase: null,
   }
 }
@@ -319,6 +322,13 @@ function idOrNull(v: unknown, fallback: string | null): string | null {
   return fallback
 }
 
+function sanitizePlayQuantize(v: unknown, d: PlayQuantizeConfig): PlayQuantizeConfig {
+  return {
+    mode: oneOf<PlayTimingMode>(prop(v, 'mode'), PLAY_TIMING_MODES, d.mode),
+    grid: oneOf<PlayGrid>(prop(v, 'grid'), PLAY_GRIDS, d.grid),
+  }
+}
+
 function sanitizeMidi(v: unknown, d: MidiConfig): MidiConfig {
   return {
     inEnabled: bool(prop(v, 'inEnabled'), d.inEnabled),
@@ -406,6 +416,7 @@ export function sanitizeSession(raw: unknown): Session {
     // 'off'. The literal stays in CHORD_MODES for index-stable share decoding.
     chordMode: migrateChordMode(oneOf<ChordMode>(prop(raw, 'chordMode'), CHORD_MODES, d.chordMode)),
     midi: sanitizeMidi(prop(raw, 'midi'), d.midi),
+    playQuantize: sanitizePlayQuantize(prop(raw, 'playQuantize'), d.playQuantize),
     phrase: sanitizePhrase(prop(raw, 'phrase')),
   }
   const tuning = sanitizeTuning(prop(raw, 'tuning'))

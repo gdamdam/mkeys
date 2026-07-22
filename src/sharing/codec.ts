@@ -46,6 +46,8 @@ import {
   type PortableTuning,
 } from '../types'
 import { isValidTuning, normalizeTuning, periodCents } from '../vendor/tuning-core/model'
+import { PLAY_GRIDS, PLAY_TIMING_MODES } from '../transport/playQuantize'
+import type { PlayGrid, PlayQuantizeConfig, PlayTimingMode } from '../transport/playQuantize'
 import {
   MAX_DECODED_SHARE_CHARS,
   MAX_MIDI_DEVICE_ID,
@@ -151,6 +153,7 @@ interface CompactSession {
   cm: number // chordMode index
   mi: CompactMidi
   ph: CompactPhrase | null
+  pq?: [number, number] // playQuantize [modeIdx, gridIdx] (§24; absent → immediate/off)
   tn?: CompactTuning // tuning (optional; absent = 12-TET)
   pn?: string // presetName (optional)
   mv?: number // masterVolume (optional; absent in older payloads)
@@ -212,6 +215,7 @@ export function createDefaultSession(): Session {
       outChannel: 1,
       mpe: false,
     },
+    playQuantize: { mode: 'immediate', grid: 'off' },
     phrase: null,
   }
 }
@@ -421,6 +425,14 @@ function idOrNull(v: unknown, fb: string | null): string | null {
   return fb
 }
 
+function sanitizePlayQuantize(raw: unknown, fb: PlayQuantizeConfig): PlayQuantizeConfig {
+  const r = isRecord(raw) ? raw : {}
+  return {
+    mode: coerceEnum<PlayTimingMode>(r.mode, PLAY_TIMING_MODES, fb.mode),
+    grid: coerceEnum<PlayGrid>(r.grid, PLAY_GRIDS, fb.grid),
+  }
+}
+
 function sanitizeMidi(raw: unknown, fb: MidiConfig): MidiConfig {
   const r = isRecord(raw) ? raw : {}
   return {
@@ -509,6 +521,7 @@ export function sanitizeSession(raw: unknown): Session {
       return m === 'unison' ? 'off' : m
     })(),
     midi: sanitizeMidi(r.midi, fb.midi),
+    playQuantize: sanitizePlayQuantize(r.playQuantize, fb.playQuantize),
     phrase: r.phrase === null || r.phrase === undefined ? null : sanitizePhrase(r.phrase),
   }
   const tuning = sanitizeTuning(r.tuning)
@@ -609,6 +622,7 @@ function toCompact(s: Session): CompactSession {
       s.midi.outputId,
     ],
     ph: encodePhrase(s.phrase),
+    pq: [PLAY_TIMING_MODES.indexOf(s.playQuantize.mode), PLAY_GRIDS.indexOf(s.playQuantize.grid)],
     mv: s.masterVolume,
     ig: s.inputGain,
     bp: s.bpm,
@@ -755,6 +769,9 @@ function fromCompact(raw: unknown): Record<string, unknown> {
       inputId: typeof mi[5] === 'string' ? mi[5] : null,
       outputId: typeof mi[6] === 'string' ? mi[6] : null,
     },
+    playQuantize: Array.isArray(raw.pq)
+      ? { mode: fromIdx(PLAY_TIMING_MODES, raw.pq[0]), grid: fromIdx(PLAY_GRIDS, raw.pq[1]) }
+      : undefined, // absent → sanitizeSession supplies immediate/off (§24)
     phrase: raw.ph === null || raw.ph === undefined ? null : decodePhrase(raw.ph),
     // Pass through untouched: absent in older payloads, where sanitizeSession
     // supplies the default (1) rather than nn()'s 0 (which would be silence).

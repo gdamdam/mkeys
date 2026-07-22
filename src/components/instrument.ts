@@ -24,6 +24,7 @@ import type {
   Mode,
   PatchParams,
   PitchClass,
+  PlayQuantizeConfig,
   PortableTuning,
   Session,
   SurfaceConfig,
@@ -229,4 +230,8 @@ export interface Instrument {
   noteOffVoice: (voiceId: number) => void
   /** MIDI note currently sounding for each live logical voice (for UI feedback). */
   activeVoices: ReadonlyMap<number, { midi: number }>
+  /** Voices awaiting a quantized-live onset (§24), for a pending-state highlight. */
+  pendingNotes: ReadonlyMap<number, { midi: number }>
+  /** Play-quantize (timing) mode + grid (§24). Distinct from glide quantize. */
+  setPlayQuantize: (next: PlayQuantizeConfig) => void
 }

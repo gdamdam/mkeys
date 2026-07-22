@@ -61,6 +61,13 @@ import { parseKbm } from '../vendor/tuning-core/scala'
 import { buildGrid, effectiveSurface } from '../surface/geometry'
 import { Scheduler, type PatternEvent, type PlannedEvent } from '../transport/scheduler'
 import { secondsPerBeat } from '../transport/clock'
+import {
+  boundaryDelayBeats,
+  gridIntervalBeats,
+  snapBeat,
+  type PlayQuantizeConfig,
+} from '../transport/playQuantize'
+import { makeLinkClockSnapshot, projectBeat, type LinkClockSnapshot } from '../transport/linkClock'
 import { generateArpSequence } from '../transport/arp'
 import {
   autoDetectLinkBridge,
@@ -274,6 +281,18 @@ class InstrumentStore {
   private phraseTable: PhraseMeta[] = []
   private readonly phraseVoiceIds = new Set<number>()
 
+  // --- play quantize (§24, "quantized live") ---
+  /** Input voices scheduled to sound at a future grid boundary but not yet audible. */
+  private readonly pendingVoices = new Map<
+    number,
+    { indexInScale: number; octave: number; expr: TouchExpression; timer: ReturnType<typeof setTimeout> }
+  >()
+  /** ctx time of local beat 0, rebased on tempo change to preserve musical phase. */
+  private playAnchorSec = 0
+  private playAnchorBpm = 120
+  /** Latest Link timing snapshot (for shared-grid quantization), or null. */
+  private linkSnapshot: LinkClockSnapshot | null = null
+
   private autosaveTimer: ReturnType<typeof setTimeout> | null = null
 
   private readonly listeners = new Set<() => void>()
@@ -322,6 +341,11 @@ class InstrumentStore {
   private buildSnapshot(): void {
     const active = new Map<number, { midi: number }>()
     for (const [id, v] of this.voices) active.set(id, { midi: v.baseMidi })
+    // Pending quantized-live onsets, for the surface's pending-state highlight (§24).
+    const pending = new Map<number, { midi: number }>()
+    for (const [id, p] of this.pendingVoices) {
+      pending.set(id, { midi: this.chordMidis(p.indexInScale, p.octave).baseMidi })
+    }
     const link: LinkStatus = {
       enabled: this.linkEnabledFlag,
       connected: this.linkState.connected,
@@ -385,6 +409,8 @@ class InstrumentStore {
       moveVoice: this.moveVoice,
       noteOffVoice: this.noteOffVoice,
       activeVoices: active,
+      pendingNotes: pending,
+      setPlayQuantize: this.setPlayQuantize,
     }
   }
 
@@ -409,6 +435,9 @@ class InstrumentStore {
       this.engine.setMacros(this.session.macros)
       this.engine.setMasterVolume(this.session.masterVolume)
       this.engine.setInputGain(this.session.inputGain)
+      // Anchor the local play-quantize grid at start (§24), then apply tempo.
+      this.playAnchorSec = this.ctxNow()
+      this.playAnchorBpm = this.bpm
       this.applyTempo()
 
       // start() is idempotent — drop any prior subscription before re-subscribing.
@@ -692,6 +721,22 @@ class InstrumentStore {
     this.engine.setTempo(eb)
     this.arpScheduler.setTempo(eb)
     this.phraseScheduler.setTempo(eb)
+    this.rebasePlayAnchor()
+  }
+
+  /**
+   * Rebase the local play-quantize phase anchor so the current beat position is
+   * continuous across a tempo change — the grid keeps its phase instead of
+   * jumping/restarting (§24). Already-scheduled pending onsets keep their
+   * absolute fire times (their timers were set at schedule time).
+   */
+  private rebasePlayAnchor(): void {
+    const now = this.ctxNow()
+    const oldSpb = 60 / (this.playAnchorBpm > 0 ? this.playAnchorBpm : 120)
+    const beatNow = (now - this.playAnchorSec) / oldSpb
+    const newSpb = 60 / (this.bpm > 0 ? this.bpm : 120)
+    this.playAnchorSec = now - beatNow * newSpb
+    this.playAnchorBpm = this.bpm
   }
 
   /** Beats elapsed at ctx time `t` on the piecewise capture timeline (§18). */
@@ -824,10 +869,10 @@ class InstrumentStore {
     indexInScale: number,
     octave: number,
     expr: TouchExpression,
-    opts?: { bypassLatch?: boolean },
+    opts?: { bypassLatch?: boolean; bypassQuantize?: boolean },
   ): number => {
     void this.ensureStarted()
-    const { baseMidi, midis, freqs } = this.chordMidis(indexInScale, octave)
+    const { baseMidi } = this.chordMidis(indexInScale, octave)
 
     // Latch toggle: re-pressing a latched-but-released note turns it off. Phrase
     // playback bypasses this so a looped note never toggles a held latch note.
@@ -841,7 +886,52 @@ class InstrumentStore {
       }
     }
 
+    // A stable logical id is returned immediately, even when the audible onset is
+    // deferred to a grid boundary (§24). moveVoice/noteOffVoice accept it in any
+    // state (pending / sounding).
     const id = this.nextVoiceId++
+
+    // §24 Quantized-live: defer a directly-played onset to the next grid
+    // boundary. Arp-routed notes are already tempo-quantized (never double-
+    // quantize); phrase playback + other internal callers pass bypassQuantize.
+    const pq = this.session.playQuantize
+    const shouldDefer =
+      pq.mode === 'live' && pq.grid !== 'off' && !opts?.bypassQuantize && !this.session.arp.enabled
+    if (shouldDefer) {
+      const now = this.ctxNow()
+      const delayMs = Math.max(0, (this.nextPlayBoundarySec(now) - now) * 1000)
+      const timer = setTimeout(() => {
+        const p = this.pendingVoices.get(id)
+        if (!p) return // cancelled before onset — no callback fires for it (§24)
+        this.pendingVoices.delete(id)
+        // Sound with the LATEST expression captured while pending, and expand
+        // chord/unison + allocate MPE at the quantized onset.
+        this.soundVoice(id, p.indexInScale, p.octave, p.expr)
+        this.emit()
+      }, delayMs)
+      this.pendingVoices.set(id, { indexInScale, octave, expr, timer })
+      this.emit() // UI reflects the pending-onset state
+      return id
+    }
+
+    this.soundVoice(id, indexInScale, octave, expr)
+    this.emit()
+    return id
+  }
+
+  /**
+   * Actually start a directly-played voice (chord/unison expansion, engine +
+   * MIDI-out, arp routing, record capture) under the given id. Split out of
+   * {@link noteOnAt} so a quantized-live onset (§24) sounds the identical way a
+   * fresh press does, reusing the reserved id. Callers emit.
+   */
+  private soundVoice(
+    id: number,
+    indexInScale: number,
+    octave: number,
+    expr: TouchExpression,
+  ): void {
+    const { baseMidi, midis, freqs } = this.chordMidis(indexInScale, octave)
     const vel = expr.pressure > 0 ? clamp01(expr.pressure) : DEFAULT_VELOCITY
     const useArp = this.session.arp.enabled
     const rec: VoiceRecord = {
@@ -876,11 +966,57 @@ class InstrumentStore {
     if (this.recorderState === 'recording') {
       this.captureEvent('on', indexInScale, octave, expr, id)
     }
+  }
+
+  /** ctx time of the next play-quantize grid boundary ≥ `now` (§24). */
+  private nextPlayBoundarySec(now: number): number {
+    const interval = gridIntervalBeats(this.session.playQuantize.grid, BEATS_PER_BAR)
+    if (interval <= 0) return now
+    let beatNow: number
+    let spb: number
+    if (this.linkOwnsTempo() && this.linkSnapshot) {
+      // Land on the SHARED Link grid so quantized notes align with peers (§24).
+      spb = 60 / (this.linkState.tempo > 0 ? this.linkState.tempo : 120)
+      beatNow = projectBeat(this.linkSnapshot, now)
+    } else {
+      // Local phase anchor (rebased on tempo change to preserve phase).
+      spb = 60 / (this.bpm > 0 ? this.bpm : 120)
+      beatNow = (now - this.playAnchorSec) / spb
+    }
+    return now + boundaryDelayBeats(beatNow, interval) * spb
+  }
+
+  /** Cancel one pending onset so its scheduled callback never fires (§24). */
+  private cancelPending(id: number): void {
+    const p = this.pendingVoices.get(id)
+    if (!p) return
+    clearTimeout(p.timer)
+    this.pendingVoices.delete(id)
+  }
+
+  /** Cancel every pending onset (panic / mode change / teardown, §24). */
+  private clearAllPending(): void {
+    for (const p of this.pendingVoices.values()) clearTimeout(p.timer)
+    this.pendingVoices.clear()
+  }
+
+  setPlayQuantize = (next: PlayQuantizeConfig): void => {
+    // A mode/grid change cancels in-flight pending onsets so none fires under the
+    // old settings, then persists (§24).
+    this.clearAllPending()
+    this.session = { ...this.session, playQuantize: { mode: next.mode, grid: next.grid } }
+    this.autosave()
     this.emit()
-    return id
   }
 
   moveVoice = (voiceId: number, expr: TouchExpression): void => {
+    // A pending (not-yet-sounding) voice retains its latest expression, applied
+    // when it sounds at the boundary (§24).
+    const p = this.pendingVoices.get(voiceId)
+    if (p) {
+      p.expr = expr
+      return
+    }
     const v = this.voices.get(voiceId)
     if (!v) return
     v.expr = expr
@@ -894,6 +1030,13 @@ class InstrumentStore {
   }
 
   noteOffVoice = (voiceId: number): void => {
+    // Released before its quantized onset → cancel completely; no note ever
+    // sounds and no stray callback fires (§24).
+    if (this.pendingVoices.has(voiceId)) {
+      this.cancelPending(voiceId)
+      this.emit()
+      return
+    }
     const v = this.voices.get(voiceId)
     if (!v) return
     if (this.latchOn) {
@@ -952,6 +1095,7 @@ class InstrumentStore {
       }
     }
     this.voices.clear()
+    this.clearAllPending() // drop any quantized-live onsets awaiting a boundary (§24)
     this.clearPhrasePending()
     this.stopArp()
     this.engine.panic()
@@ -1109,7 +1253,14 @@ class InstrumentStore {
     if (this.recordedEvents.length >= MAX_PHRASE_EVENTS) return
     // Piecewise musical time (§18): integrates tempo changes rather than
     // dividing total elapsed seconds by the latest BPM.
-    const beat = this.recordBeatAt(this.ctxNow())
+    let beat = this.recordBeatAt(this.ctxNow())
+    // §24 Quantized-recording: snap the CAPTURED position to the grid while live
+    // monitoring stays immediate. buildPhrasePattern's min-duration floor then
+    // prevents a zero-length note when on/off snap to the same beat.
+    const pq = this.session.playQuantize
+    if (pq.mode === 'recording' && pq.grid !== 'off') {
+      beat = snapBeat(beat, gridIntervalBeats(pq.grid, BEATS_PER_BAR))
+    }
     this.recordedEvents.push({
       time: Math.max(0, beat),
       type,
@@ -1719,6 +1870,9 @@ class InstrumentStore {
 
   private onLink(state: LinkState): void {
     this.linkState = state
+    // Keep a timing snapshot so quantized-live onsets can land on the shared Link
+    // grid (§2/§24); cleared on disconnect so we fall back to the local anchor.
+    this.linkSnapshot = state.connected ? makeLinkClockSnapshot(state, this.ctxNow()) : null
     // Recompute effective tempo and push it downstream. When Link doesn't own
     // tempo (not user-enabled, or dropped) this cleanly restores local BPM;
     // when it does, it adopts the shared tempo. applyTempo reads linkOwnsTempo,
