@@ -5,9 +5,9 @@
 **Touch a note. Bend into the next. Never leave the scale.**
 
 
-[![version](https://img.shields.io/badge/version-0.1.21-6c8f3a)](./package.json)
+[![version](https://img.shields.io/badge/version-0.6.0-6c8f3a)](./package.json)
 [![license](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](./LICENSE)
-[![tests](https://img.shields.io/badge/tests-307%20passing-2ea043)](#verification)
+[![tests](https://img.shields.io/badge/tests-passing-2ea043)](#verification)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](./tsconfig.json)
 [![React](https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=white)](https://react.dev)
 [![Vite](https://img.shields.io/badge/Vite-8-646cff?logo=vite&logoColor=white)](https://vite.dev)
@@ -36,7 +36,7 @@
 - **Performance tools** — arpeggiator, chord mode, latch, and a phrase recorder for building up and looping ideas hands-free.
 - **FX tail** — a shared master chain: drive, chorus, tempo-syncable delay, reverb, and a master limiter. Click-free, no runaway peaks.
 - **Optional MIDI in + out** — receive from a controller and send the *actual played notes* with correct note-ownership and note-offs. Enable **MPE** on output to carry microtuned pitches to external gear: each voice takes its own member channel with a per-note pitch bend (receiver bend range ±48 semitones), so a chord's notes bend independently instead of rounding to 12-TET. Never required.
-- **Optional Ableton Link** — tempo-follow via the companion **mpump** link-bridge; degrades gracefully when it's absent.
+- **Optional Ableton Link** — tempo-follow via the companion **mpump** link-bridge; degrades gracefully when it's absent. Link takes tempo **only when you enable it** *and* the bridge is connected — a background auto-detect discovers availability without seizing tempo, and disabling Link instantly restores your stored local BPM.
 - **Optional mbus publish** — the “bus” toggle next to Link offers the master output to the [mbus](https://mbus.mpump.live) patchbay as a source named `mkeys` (tab-to-tab WebRTC via the same link-bridge, peer-to-peer, no server). Off by default; harmless without the bridge.
 - **Sessions, JSON & share links** — the working session autosaves; named sessions use local persistence (IndexedDB), readable JSON import/export, and self-contained share links — no backend.
 - **Master WAV capture** — record the master bus straight to a `.wav` file, entirely in the browser.
@@ -77,6 +77,13 @@ Two QWERTY rows map onto the first two rows of the surface, so you can play with
 
 Keyboard presses use a fixed neutral expression (no glide, mid timbre, firm pressure) — the continuous axes are reserved for touch and pointer input.
 
+## Performance controls
+
+- **Panic / All-Notes-Off** — an always-visible **Panic** button on the transport strip (reachable with controls shown or hidden), also bound to **`Esc`**. `Esc` is never a musical-typing key and is ignored inside text fields, so it can't fire mid-word. Panic silences every synth voice, MIDI-out note, MPE allocation, pitch-bend and sustain state, and latch-held notes, **and stops the arpeggiator and phrase playback** (their modes stay armed — play again to resume).
+- **Sustain vs. latch** — these are separate. **Latch** (Perform panel) is a performance toggle that keeps played notes sounding after release. **Sustain** is the MIDI pedal (CC64): while it's down, note-offs are deferred and released when the pedal lifts — for keys no longer held; keys still down keep sounding. Re-striking a sustained note retriggers it. The pedal never flips the on-screen Latch toggle.
+- **Stored tempo** — the local BPM is saved with the session, so a phrase recorded at one tempo reloads and shares at that tempo. Sessions and share links created before this default to 120 BPM. Ableton Link may drive the *effective* tempo while enabled, but never overwrites your saved local BPM.
+- **Chord modes** — Off · Fifth · Octave · Triad. (An earlier redundant "Unison" mode — identical to Off, since thickening is the patch's own unison voices — was retired; old sessions/links that used it load as Off.)
+
 ## Latency & live use
 
 Audio in the browser has an unavoidable round-trip delay — the hardware output buffer plus the `AudioContext`'s `baseLatency` and `outputLatency` — **typically ~10–30 ms**. That's a platform floor no web app can beat, so mkeys opens its context with `latencyHint: 'interactive'` (smallest safe buffer) and **reports the measured figure** in **Session → Output latency** rather than implying it's zero.
@@ -110,7 +117,7 @@ transport/ Scheduler (lookahead,  ◀── sample ─────┤           
 ## Verification
 
 ```bash
-npm run check   # vendored:check + typecheck + lint + 297 tests + production build
+npm run check   # vendored:check + typecheck + lint + full test suite + production build
 ```
 
 Tests are deterministic and live next to the code (scales & degrees, surface geometry, glide/quantize math, arp, scheduler planning, MIDI bytes + note ownership, persistence, share round-trips, keyboard map). Vitest runs in a Node environment, so **touch-feel and audio quality are covered by a manual physical-device QA checklist** (phone + tablet + desktop), not unit tests:
