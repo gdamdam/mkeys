@@ -14,7 +14,15 @@ import type { Session } from '../types'
 const DB_NAME = 'mkeys'
 const DB_VERSION = 1
 const SESSION_STORE = 'sessions'
-const AUTOSAVE_KEY = 'autosave'
+
+/**
+ * Reserved record id for the working-session autosave slot (§5). It shares the
+ * sessions store but is NOT a user-created named session: {@link list} filters
+ * it out, and the store refuses to load/delete it as one. Kept as a reserved id
+ * (rather than a separate object store) so existing IndexedDB data needs no
+ * migration.
+ */
+export const AUTOSAVE_KEY = 'autosave'
 
 /** A stored session record: a sanitized Session plus its lookup id. */
 export interface StoredSession {
@@ -142,7 +150,10 @@ export async function list(): Promise<StoredSession[]> {
       store.getAll() as IDBRequest<StoredSession[]>,
     )
     if (!all) return []
-    return all.map((rec) => ({ id: rec.id, session: sanitizeSession(rec.session) }))
+    // The reserved autosave slot is not a named session — never surface it (§5).
+    return all
+      .filter((rec) => rec.id !== AUTOSAVE_KEY)
+      .map((rec) => ({ id: rec.id, session: sanitizeSession(rec.session) }))
   })
   return result ?? []
 }

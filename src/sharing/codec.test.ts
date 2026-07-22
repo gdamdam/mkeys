@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MODES, SESSION_VERSION, type Mode, type Session } from '../types'
+import { DEFAULT_BPM, MODES, SESSION_VERSION, type Mode, type Session } from '../types'
 import {
   COMPACT_VERSION,
   createDefaultSession,
@@ -30,6 +30,23 @@ function makeSession(overrides: Partial<Session> = {}): Session {
   const base = createDefaultSession()
   return sanitizeSession({ ...base, ...overrides })
 }
+
+describe('stored BPM in share links (§10)', () => {
+  it('round-trips local BPM through a share link', () => {
+    const s = makeSession({ bpm: 96 })
+    const back = decodeSession(encodeSession(s))
+    expect(back?.bpm).toBe(96)
+  })
+
+  it('an old payload without BPM decodes to the default', () => {
+    // Hand-craft a compact payload with no `bp` field (pre-§10 share links).
+    const s = makeSession({ bpm: 150 })
+    const compact = JSON.parse(decodeWire(encodeSession(s))) as Record<string, unknown>
+    delete compact.bp
+    const back = decodeSession(b64(compact))
+    expect(back?.bpm).toBe(DEFAULT_BPM)
+  })
+})
 
 describe('share ↔ save bound parity (§4)', () => {
   // The share codec and the persistence sanitizer must agree on arp/unison

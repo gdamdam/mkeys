@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MODES, SESSION_VERSION } from '../types'
+import { DEFAULT_BPM, MAX_BPM, MIN_BPM, MODES, SESSION_VERSION } from '../types'
 import type { Session } from '../types'
 import {
   MAX_PHRASE_EVENTS,
@@ -10,6 +10,32 @@ import {
   migrateSession,
   sanitizeSession,
 } from './session'
+
+describe('stored BPM (§10)', () => {
+  it('defaults to DEFAULT_BPM when absent (old sessions)', () => {
+    expect(defaultSession().bpm).toBe(DEFAULT_BPM)
+    expect(sanitizeSession({}).bpm).toBe(DEFAULT_BPM)
+    expect(migrateSession({ root: 2, scale: 'dorian' }).bpm).toBe(DEFAULT_BPM)
+  })
+
+  it('preserves an in-range BPM', () => {
+    expect(sanitizeSession({ bpm: 90 }).bpm).toBe(90)
+  })
+
+  it('clamps out-of-range and rejects non-finite BPM', () => {
+    expect(sanitizeSession({ bpm: 5 }).bpm).toBe(MIN_BPM)
+    expect(sanitizeSession({ bpm: 100000 }).bpm).toBe(MAX_BPM)
+    expect(sanitizeSession({ bpm: Number.NaN }).bpm).toBe(DEFAULT_BPM)
+    expect(sanitizeSession({ bpm: Infinity }).bpm).toBe(DEFAULT_BPM)
+    expect(sanitizeSession({ bpm: 'fast' }).bpm).toBe(DEFAULT_BPM)
+  })
+
+  it('survives a JSON export/import round-trip', () => {
+    const s: Session = { ...defaultSession(), bpm: 96 }
+    const back = importSessionJSON(exportSessionJSON(s))
+    expect(back?.bpm).toBe(96)
+  })
+})
 
 describe('defaultSession', () => {
   it('produces a self-consistent, current-version session', () => {

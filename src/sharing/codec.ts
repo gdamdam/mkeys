@@ -18,6 +18,9 @@
  * persistence, this local copy is the natural thing to delete.
  */
 import {
+  DEFAULT_BPM,
+  MAX_BPM,
+  MIN_BPM,
   MODES,
   SESSION_VERSION,
   type ArpConfig,
@@ -141,6 +144,7 @@ interface CompactSession {
   pn?: string // presetName (optional)
   mv?: number // masterVolume (optional; absent in older payloads)
   ig?: number // inputGain (optional; absent in older payloads)
+  bp?: number // local BPM (optional; absent in older payloads → DEFAULT_BPM)
 }
 
 // ---------------------------------------------------------------------------
@@ -152,6 +156,7 @@ export function createDefaultSession(): Session {
   return {
     version: SESSION_VERSION,
     name: 'Untitled',
+    bpm: DEFAULT_BPM,
     keyRoot: 0,
     mode: 'major',
     surface: {
@@ -452,6 +457,7 @@ export function sanitizeSession(raw: unknown): Session {
   const session: Session = {
     version: SESSION_VERSION,
     name: str(r.name, fb.name),
+    bpm: num(r.bpm, MIN_BPM, MAX_BPM, fb.bpm),
     keyRoot: int(r.keyRoot, 0, 11, fb.keyRoot),
     mode: coerceEnum<Mode>(r.mode, MODES, fb.mode),
     surface: sanitizeSurface(r.surface, fb.surface),
@@ -554,6 +560,7 @@ function toCompact(s: Session): CompactSession {
     ph: encodePhrase(s.phrase),
     mv: s.masterVolume,
     ig: s.inputGain,
+    bp: s.bpm,
   }
   if (s.tuning) {
     compact.tn = [s.tuning.tonicHz, periodCents(s.tuning), s.tuning.name, [...s.tuning.scaleCents]]
@@ -661,6 +668,8 @@ function fromCompact(raw: unknown): Record<string, unknown> {
   const mi = Array.isArray(raw.mi) ? raw.mi : []
   const loose: Record<string, unknown> = {
     name: raw.n,
+    // Absent in older payloads → sanitizeSession supplies DEFAULT_BPM.
+    bpm: raw.bp,
     keyRoot: raw.k,
     mode: fromIdx(MODES, raw.m),
     surface: {

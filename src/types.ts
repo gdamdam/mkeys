@@ -236,10 +236,26 @@ export type WorkletCommand =
 /** Schema version for persisted/shared {@link Session} payloads. Bump on breaking changes. */
 export const SESSION_VERSION = 1
 
+/**
+ * Documented local-tempo range (BPM). The same bounds the transport clamps to;
+ * the sanitizer uses them so a stored/shared/imported BPM is always in range.
+ */
+export const MIN_BPM = 20
+export const MAX_BPM = 999
+/** Default local tempo for fresh sessions and older payloads that predate stored BPM. */
+export const DEFAULT_BPM = 120
+
 /** The complete, serialisable instrument state. */
 export interface Session {
   version: number
   name: string
+  /**
+   * Local tempo in BPM ({@link MIN_BPM}..{@link MAX_BPM}). Persisted so a phrase
+   * recorded at one tempo reloads/shares at that tempo. Ableton Link may override
+   * the *effective* tempo while enabled (§2) without overwriting this stored value.
+   * Additive field: payloads predating it decode to {@link DEFAULT_BPM}.
+   */
+  bpm: number
   keyRoot: PitchClass
   mode: Mode
   /**

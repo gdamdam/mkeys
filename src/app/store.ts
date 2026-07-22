@@ -21,6 +21,7 @@
  *   validated by the pure modules they pass through before reaching the engine.
  */
 
+import { MAX_BPM, MIN_BPM } from '../types'
 import type {
   ArpConfig,
   ChordMode,
@@ -260,6 +261,8 @@ class InstrumentStore {
     const fromUrl = typeof location !== 'undefined' ? sessionFromUrl(location.href) : null
     this.loadedFromUrl = fromUrl !== null
     this.session = fromUrl ?? defaultSession()
+    // Local tempo is persisted on the session (§10); adopt it as the live BPM.
+    this.bpm = this.session.bpm
 
     this.arpScheduler = new Scheduler({
       now: () => this.ctxNow(),
@@ -368,6 +371,7 @@ class InstrumentStore {
         const saved = await db.getAutosave()
         if (saved) {
           this.session = saved
+          this.bpm = saved.bpm // adopt the autosaved local tempo (§10)
           this.rebuildGrid()
         }
       }
@@ -602,11 +606,15 @@ class InstrumentStore {
   setBpm = (bpm: number): void => {
     // Always store the local BPM so it can be restored the moment Link is
     // disabled (§2). It only drives the engine when Link isn't the owner.
-    this.bpm = Math.min(999, Math.max(20, bpm))
+    this.bpm = Math.min(MAX_BPM, Math.max(MIN_BPM, bpm))
+    // Persist on the session so the tempo survives reload/share (§10). Link may
+    // own the *effective* tempo, but the stored local BPM is never overwritten.
+    this.session = { ...this.session, bpm: this.bpm }
     if (!this.linkOwnsTempo()) {
       this.applyTempo()
       sendLinkTempo(this.bpm)
     }
+    this.autosave()
     this.emit()
   }
 
@@ -1157,11 +1165,14 @@ class InstrumentStore {
   }
 
   loadSession = async (id: string): Promise<void> => {
+    // The autosave slot is not a user session — never loadable as one (§5).
+    if (id === db.AUTOSAVE_KEY) return
     const s = await db.get(id)
     if (s) this.applySession(s)
   }
 
   deleteSession = async (id: string): Promise<void> => {
+    if (id === db.AUTOSAVE_KEY) return // guard the reserved slot (§5)
     await db.del(id)
     await this.refreshSavedSessions()
   }
@@ -1176,6 +1187,10 @@ class InstrumentStore {
       this.recorderState = 'idle'
     }
     this.session = s
+    // Adopt the session's stored local tempo (§10). applyTempo pushes it to the
+    // engine, synced delay, LFO, arp + phrase schedulers — unless Link owns the
+    // effective tempo, in which case the stored BPM is still remembered.
+    this.bpm = s.bpm
     this.rebuildGrid()
     if (this.startedFlag) {
       this.engine.setPatch(s.patch)
@@ -1183,8 +1198,8 @@ class InstrumentStore {
       this.engine.setMacros(s.macros)
       this.engine.setMasterVolume(s.masterVolume)
       this.engine.setInputGain(s.inputGain)
-      this.applyTempo()
     }
+    this.applyTempo()
     if (s.arp.enabled) this.rebuildArp()
     this.autosave()
     this.emit()

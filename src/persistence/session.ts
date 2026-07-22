@@ -7,7 +7,7 @@
  * Session that passed through here is fully in-range and current-version.
  */
 
-import { MODES, SESSION_VERSION } from '../types'
+import { DEFAULT_BPM, MAX_BPM, MIN_BPM, MODES, SESSION_VERSION } from '../types'
 import { isValidTuning, normalizeTuning } from '../vendor/tuning-core/model'
 import type {
   ArpConfig,
@@ -114,6 +114,7 @@ export function defaultSession(): Session {
   return {
     version: SESSION_VERSION,
     name: 'Untitled',
+    bpm: DEFAULT_BPM,
     keyRoot: 0,
     mode: 'major',
     surface: {
@@ -353,6 +354,7 @@ export function sanitizeSession(raw: unknown): Session {
   const s: Session = {
     version: SESSION_VERSION,
     name: str(prop(raw, 'name'), d.name),
+    bpm: num(prop(raw, 'bpm'), MIN_BPM, MAX_BPM, d.bpm),
     keyRoot: int(prop(raw, 'keyRoot'), 0, 11, d.keyRoot),
     mode: oneOf<Mode>(prop(raw, 'mode'), MODES, d.mode),
     surface: sanitizeSurface(prop(raw, 'surface'), d.surface),
