@@ -86,6 +86,10 @@ Keyboard presses use a fixed neutral expression (no glide, mid timbre, firm pres
 - **Master WAV capture** — records the master bus to a `.wav`. Capture holds the take in memory, so it's bounded to a documented ceiling (**5 minutes**); the Session panel shows elapsed / capacity while recording, and capture auto-stops and finalises at the limit. A take that captured no audio is never downloaded as an empty file.
 - **Chord modes** — Off · Fifth · Octave · Triad. (An earlier redundant "Unison" mode — identical to Off, since thickening is the patch's own unison voices — was retired; old sessions/links that used it load as Off.)
 
+## Accessibility
+
+The control drawer is a proper WAI-ARIA **tablist**: Sound / Perform / Session tabs carry `role="tab"` with `aria-controls`/`aria-selected`, panels are `role="tabpanel"` labelled by their tab, hidden panels are removed from assistive tech and the tab order, and the tabs are keyboard-operable with **Left/Right** and **Home/End** (roving tabindex). Status and error messages use live regions (`role="status"` / `role="alert"`), and the surface's musical typing rows never capture keys while a text field is focused.
+
 ## Latency & live use
 
 Audio in the browser has an unavoidable round-trip delay — the hardware output buffer plus the `AudioContext`'s `baseLatency` and `outputLatency` — **typically ~10–30 ms**. That's a platform floor no web app can beat, so mkeys opens its context with `latencyHint: 'interactive'` (smallest safe buffer) and **reports the measured figure** in **Session → Output latency** rather than implying it's zero.
