@@ -27,11 +27,25 @@ const priv = instrumentStore as unknown as StoreMidiPrivates
 
 const DEFAULT_EXPR: TouchExpression = { pitch: 0, glide: 0, timbre: 0.5, pressure: 0.8 }
 
+/** Full MidiConfig defaults (§12) so tests only specify the fields they exercise. */
+const MIDI_BASE = {
+  inEnabled: false,
+  outEnabled: false,
+  inputId: null,
+  inputChannel: 0,
+  outputId: null,
+  outChannel: 1,
+  mpe: false,
+} as const
+
 /** Install a fake MIDI output that records every `send(bytes)`. */
 function captureMidiOut(): number[][] {
   const sent: number[][] = []
-  const output = { send: (m: number[]) => sent.push([...m]) }
-  priv.midiAccess = { outputs: new Map([['out', output]]) }
+  // A fuller fake MIDIAccess (§12): the routing code enumerates inputs + outputs
+  // and reads port id/name. Output id is 'out' so the default (null → first
+  // available) resolves to it.
+  const output = { id: 'out', name: 'Fake Out', send: (m: number[]) => sent.push([...m]) }
+  priv.midiAccess = { inputs: new Map(), outputs: new Map([['out', output]]) }
   priv.midiReadyFlag = true
   return sent
 }
@@ -75,7 +89,7 @@ function voiceFor(channel: number, note: number): { baseMidi: number; expr: Touc
 describe('MIDI-in pitch bend', () => {
   beforeEach(() => {
     instrumentStore.panic()
-    instrumentStore.setMidiConfig({ inEnabled: true, outEnabled: false, outChannel: 1, mpe: false })
+    instrumentStore.setMidiConfig({ ...MIDI_BASE, inEnabled: true, outEnabled: false, outChannel: 1, mpe: false })
   })
 
   it('applies bend per channel so MPE voices stay independent', () => {
@@ -111,7 +125,7 @@ describe('MIDI-in pitch bend', () => {
 describe('MIDI-in ownership by (channel, note) (§3)', () => {
   beforeEach(() => {
     instrumentStore.panic()
-    instrumentStore.setMidiConfig({ inEnabled: true, outEnabled: false, outChannel: 1, mpe: false })
+    instrumentStore.setMidiConfig({ ...MIDI_BASE, inEnabled: true, outEnabled: false, outChannel: 1, mpe: false })
   })
 
   it('the same note on two MPE channels makes two independent voices', () => {
@@ -160,7 +174,7 @@ describe('MIDI sustain vs performance latch (§4)', () => {
   beforeEach(() => {
     instrumentStore.panic()
     instrumentStore.setLatch(false)
-    instrumentStore.setMidiConfig({ inEnabled: true, outEnabled: false, outChannel: 1, mpe: false })
+    instrumentStore.setMidiConfig({ ...MIDI_BASE, inEnabled: true, outEnabled: false, outChannel: 1, mpe: false })
   })
 
   it('does not toggle the user-facing latch control', () => {
@@ -226,7 +240,7 @@ describe('MIDI-out MPE (microtonal)', () => {
 
   it('sends each voice on its own member channel with a pitch bend', () => {
     instrumentStore.setTuning(JUST)
-    instrumentStore.setMidiConfig({ inEnabled: false, outEnabled: true, outChannel: 1, mpe: true })
+    instrumentStore.setMidiConfig({ ...MIDI_BASE, inEnabled: false, outEnabled: true, outChannel: 1, mpe: true })
     const sent = captureMidiOut()
 
     // Sound two different scale degrees at once.
@@ -253,7 +267,7 @@ describe('MIDI-out MPE (microtonal)', () => {
 
   it('resets the bend to centre when an MPE voice is released (§21)', () => {
     instrumentStore.setTuning(JUST)
-    instrumentStore.setMidiConfig({ inEnabled: false, outEnabled: true, outChannel: 1, mpe: true })
+    instrumentStore.setMidiConfig({ ...MIDI_BASE, inEnabled: false, outEnabled: true, outChannel: 1, mpe: true })
     const sent = captureMidiOut()
     const vId = priv.noteOnAt(2, 4, DEFAULT_EXPR) // a tuned degree → off-centre bend
     const onChannel = chan(sent.filter(isNoteOn)[0])
@@ -266,7 +280,7 @@ describe('MIDI-out MPE (microtonal)', () => {
 
   it('steals a channel with a correct note-off past 15 voices, no hung notes (§21)', () => {
     instrumentStore.setTuning(JUST)
-    instrumentStore.setMidiConfig({ inEnabled: false, outEnabled: true, outChannel: 1, mpe: true })
+    instrumentStore.setMidiConfig({ ...MIDI_BASE, inEnabled: false, outEnabled: true, outChannel: 1, mpe: true })
     const sent = captureMidiOut()
     // 16 simultaneous voices — one more than the 15 MPE member channels.
     for (let i = 0; i < 16; i++) priv.noteOnAt(i % 7, 4, DEFAULT_EXPR)
@@ -279,7 +293,7 @@ describe('MIDI-out MPE (microtonal)', () => {
 
   it('panic sends note-offs and neutralises bends across MPE channels (§21)', () => {
     instrumentStore.setTuning(JUST)
-    instrumentStore.setMidiConfig({ inEnabled: false, outEnabled: true, outChannel: 1, mpe: true })
+    instrumentStore.setMidiConfig({ ...MIDI_BASE, inEnabled: false, outEnabled: true, outChannel: 1, mpe: true })
     priv.noteOnAt(2, 4, DEFAULT_EXPR)
     priv.noteOnAt(4, 4, DEFAULT_EXPR)
     const sent = captureMidiOut()
@@ -290,7 +304,7 @@ describe('MIDI-out MPE (microtonal)', () => {
 
   it('stays single-channel with no pitch bend when MPE is off', () => {
     instrumentStore.setTuning(JUST)
-    instrumentStore.setMidiConfig({ inEnabled: false, outEnabled: true, outChannel: 3, mpe: false })
+    instrumentStore.setMidiConfig({ ...MIDI_BASE, inEnabled: false, outEnabled: true, outChannel: 3, mpe: false })
     const sent = captureMidiOut()
 
     priv.noteOnAt(2, 4, DEFAULT_EXPR)

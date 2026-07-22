@@ -48,6 +48,12 @@ const MIDI_CHANNELS: ReadonlyArray<SelectOption<string>> = Array.from({ length: 
   label: `Ch ${i + 1}`,
 }))
 
+// Input-channel filter (§12): Omni (0) + channels 1..16.
+const IN_CHANNELS: ReadonlyArray<SelectOption<string>> = [
+  { value: '0', label: 'Omni' },
+  ...Array.from({ length: 16 }, (_, i) => ({ value: String(i + 1), label: `Ch ${i + 1}` })),
+]
+
 export function TransportBar() {
   const inst = useInstrument()
   const { session, link } = inst
@@ -55,6 +61,27 @@ export function TransportBar() {
   // A microtuning replaces the pitch palette outright, so the diatonic mode is
   // bypassed (see harmony/tuning.ts). Disable Scale to make that legible.
   const tuned = session.tuning != null
+
+  const setMidi = (partial: Partial<typeof session.midi>): void =>
+    inst.setMidiConfig({ ...session.midi, ...partial })
+
+  // Input: an "All inputs" option (safe merge) plus each device; disconnected
+  // saved devices are labelled so they aren't mistaken for a live port (§12).
+  const inputOptions: ReadonlyArray<SelectOption<string>> = [
+    { value: 'all', label: 'All inputs' },
+    ...inst.midiInputs.map((p) => ({
+      value: p.id,
+      label: p.connected ? p.name : `${p.name} (disconnected)`,
+    })),
+  ]
+  // Output: NO "all" (broadcasting is unsafe) — "Auto" is the first available.
+  const outputOptions: ReadonlyArray<SelectOption<string>> = [
+    { value: 'auto', label: 'Auto (first output)' },
+    ...inst.midiOutputs.map((p) => ({
+      value: p.id,
+      label: p.connected ? p.name : `${p.name} (disconnected)`,
+    })),
+  ]
 
   let linkPill: { text: string; cls: string }
   if (!link.enabled) linkPill = { text: 'Link off', cls: 'pill' }
@@ -154,27 +181,52 @@ export function TransportBar() {
               <Toggle
                 label="MIDI in"
                 checked={session.midi.inEnabled}
-                onChange={(v) => inst.setMidiConfig({ ...session.midi, inEnabled: v })}
+                onChange={(v) => setMidi({ inEnabled: v })}
               />
+              {session.midi.inEnabled && (
+                <>
+                  <Select
+                    label="Input"
+                    options={inputOptions}
+                    value={session.midi.inputId ?? 'all'}
+                    onChange={(v) => setMidi({ inputId: v === 'all' ? null : v })}
+                  />
+                  <Select
+                    label="In channel"
+                    options={IN_CHANNELS}
+                    value={String(session.midi.inputChannel)}
+                    onChange={(v) => setMidi({ inputChannel: Number(v) })}
+                  />
+                </>
+              )}
               <Toggle
                 label="MIDI out"
                 checked={session.midi.outEnabled}
-                onChange={(v) => inst.setMidiConfig({ ...session.midi, outEnabled: v })}
+                onChange={(v) => setMidi({ outEnabled: v })}
               />
-              <Select
-                label="Out channel"
-                options={MIDI_CHANNELS}
-                value={String(session.midi.outChannel)}
-                disabled={!session.midi.outEnabled || session.midi.mpe}
-                onChange={(v) => inst.setMidiConfig({ ...session.midi, outChannel: Number(v) })}
-              />
-              <Toggle
-                label="MPE"
-                hint="microtonal out (±48 st)"
-                checked={session.midi.mpe}
-                disabled={!session.midi.outEnabled}
-                onChange={(v) => inst.setMidiConfig({ ...session.midi, mpe: v })}
-              />
+              {session.midi.outEnabled && (
+                <>
+                  <Select
+                    label="Output"
+                    options={outputOptions}
+                    value={session.midi.outputId ?? 'auto'}
+                    onChange={(v) => setMidi({ outputId: v === 'auto' ? null : v })}
+                  />
+                  <Select
+                    label="Out channel"
+                    options={MIDI_CHANNELS}
+                    value={String(session.midi.outChannel)}
+                    disabled={session.midi.mpe}
+                    onChange={(v) => setMidi({ outChannel: Number(v) })}
+                  />
+                  <Toggle
+                    label="MPE"
+                    hint="microtonal out (±48 st)"
+                    checked={session.midi.mpe}
+                    onChange={(v) => setMidi({ mpe: v })}
+                  />
+                </>
+              )}
             </>
           ) : (
             <button type="button" className="pbtn" onClick={() => void inst.enableMidi()}>
@@ -200,6 +252,11 @@ export function TransportBar() {
             />
           </span>
         </div>
+        {inst.midiRoutingWarning ? (
+          <p className="ptoast ptoast--warn" role="status">
+            {inst.midiRoutingWarning}
+          </p>
+        ) : null}
       </div>
 
       {/* layout — pinned to the right edge to bookend the engine row */}

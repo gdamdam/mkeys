@@ -75,6 +75,14 @@ export interface SavedSessionMeta {
  */
 export type OpResult = { ok: true } | { ok: false; error: string }
 
+/** A MIDI port (input or output) surfaced to the routing UI (§12). */
+export interface MidiPortInfo {
+  id: string
+  name: string
+  /** False when a previously-selected device is saved but currently absent. */
+  connected: boolean
+}
+
 /** Ableton-Link-style status. The bridge is optional; `enabled` gates it. */
 export interface LinkStatus {
   enabled: boolean
@@ -181,6 +189,15 @@ export interface Instrument {
   // --- MIDI ----------------------------------------------------------------
   /** True once Web MIDI access has been granted. */
   midiReady: boolean
+  /** Available input ports, plus a saved-but-disconnected one if selected (§12). */
+  midiInputs: MidiPortInfo[]
+  /** Available output ports, plus a saved-but-disconnected one if selected (§12). */
+  midiOutputs: MidiPortInfo[]
+  /**
+   * A human-readable routing warning (e.g. a likely feedback loop, or a saved
+   * device that's disconnected), or null when routing is clean (§12).
+   */
+  midiRoutingWarning: string | null
   /** Replace the MIDI routing config (panels build the next config). */
   setMidiConfig: (next: MidiConfig) => void
   /** Request Web MIDI access (no-op if already granted). */

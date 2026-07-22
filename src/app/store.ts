@@ -48,6 +48,7 @@ import type {
   GridCell,
   Instrument,
   LinkStatus,
+  MidiPortInfo,
   OpResult,
   RecorderState,
   RecorderStatus,
@@ -227,6 +228,10 @@ class InstrumentStore {
   /** Latest pitch-bend per source channel, so MPE per-note bends stay independent. */
   private readonly midiBend = new Map<number, number>()
   private midiMod = 0
+  /** Enumerated ports for the routing UI (§12), incl. saved-but-disconnected. */
+  private midiInputs: MidiPortInfo[] = []
+  private midiOutputs: MidiPortInfo[] = []
+  private midiRoutingWarning: string | null = null
   /**
    * MIDI sustain pedal (CC64) state — distinct from the performance {@link latchOn}
    * toggle (§4). While down, a MIDI-in note-off is deferred (the note keeps
@@ -366,6 +371,9 @@ class InstrumentStore {
       startMasterRecord: this.startMasterRecord,
       stopMasterRecord: this.stopMasterRecord,
       midiReady: this.midiReadyFlag,
+      midiInputs: this.midiInputs,
+      midiOutputs: this.midiOutputs,
+      midiRoutingWarning: this.midiRoutingWarning,
       setMidiConfig: this.setMidiConfig,
       enableMidi: this.enableMidi,
       link,
@@ -1386,8 +1394,11 @@ class InstrumentStore {
       const access = await navigator.requestMIDIAccess()
       this.midiAccess = access
       this.midiReadyFlag = true
+      this.refreshMidiPorts()
       this.wireMidiInputs()
-      access.onstatechange = () => this.wireMidiInputs()
+      // A single handler, (re)assigned on each access — never stacked — so
+      // hotplug can't leave duplicate statechange handlers behind (§12).
+      access.onstatechange = () => this.onMidiStateChange()
       this.emit()
     } catch {
       this.midiReadyFlag = false
@@ -1395,10 +1406,77 @@ class InstrumentStore {
     }
   }
 
+  /** Device (dis)connect/rename: re-enumerate, re-wire, refresh warnings (§12). */
+  private onMidiStateChange(): void {
+    this.refreshMidiPorts()
+    this.wireMidiInputs()
+    this.emit()
+  }
+
+  /**
+   * Enumerate live ports for the UI, appending a saved-but-currently-absent
+   * selected device as `connected: false` so it's shown as disconnected rather
+   * than silently dropped (§12). Also recomputes the routing warning.
+   */
+  private refreshMidiPorts(): void {
+    const inputs: MidiPortInfo[] = []
+    const outputs: MidiPortInfo[] = []
+    if (this.midiAccess) {
+      for (const p of this.midiAccess.inputs.values()) {
+        inputs.push({ id: p.id, name: p.name ?? p.id, connected: true })
+      }
+      for (const p of this.midiAccess.outputs.values()) {
+        outputs.push({ id: p.id, name: p.name ?? p.id, connected: true })
+      }
+    }
+    const { inputId, outputId } = this.session.midi
+    if (inputId && !inputs.some((p) => p.id === inputId)) {
+      inputs.push({ id: inputId, name: 'Saved device (disconnected)', connected: false })
+    }
+    if (outputId && !outputs.some((p) => p.id === outputId)) {
+      outputs.push({ id: outputId, name: 'Saved device (disconnected)', connected: false })
+    }
+    this.midiInputs = inputs
+    this.midiOutputs = outputs
+    this.midiRoutingWarning = this.computeRoutingWarning(inputs, outputs)
+  }
+
+  /** A clear routing caveat for the UI, or null when routing is clean (§12). */
+  private computeRoutingWarning(inputs: MidiPortInfo[], outputs: MidiPortInfo[]): string | null {
+    const m = this.session.midi
+    if (m.inEnabled && m.inputId && !inputs.some((p) => p.id === m.inputId && p.connected)) {
+      return 'The selected MIDI input is disconnected — no controller is being heard.'
+    }
+    if (m.outEnabled && m.outputId && !outputs.some((p) => p.id === m.outputId && p.connected)) {
+      return 'The selected MIDI output is disconnected — notes are not being sent.'
+    }
+    // Feedback-loop heuristic: same-named in + out enabled together often forms
+    // a MIDI thru loop. Warn rather than block (the user may want it).
+    if (m.inEnabled && m.outEnabled) {
+      const inName = inputs.find((p) => (m.inputId ? p.id === m.inputId : true))?.name
+      const outName = outputs.find((p) => (m.outputId ? p.id === m.outputId : true))?.name
+      if (inName && outName && inName === outName) {
+        return `Input and output are the same device (“${inName}”) — this can create a feedback loop.`
+      }
+    }
+    return null
+  }
+
+  /** Whether an incoming message on `channel` (0-based) passes the input filter (§12). */
+  private inputChannelAllowed(channel: number): boolean {
+    const filter = this.session.midi.inputChannel // 0 = Omni
+    return filter === 0 || channel === filter - 1
+  }
+
   private wireMidiInputs(): void {
     if (!this.midiAccess) return
+    const sel = this.session.midi.inputId // null = all inputs
     for (const input of this.midiAccess.inputs.values()) {
-      input.onmidimessage = (e: MIDIMessageEvent) => this.handleMidiIn(e)
+      // Attach the handler only to the selected input (or all when null), and
+      // null it on every other port so a deselected device stops feeding notes
+      // and no handler lingers after a routing change (§12).
+      input.onmidimessage =
+        sel === null || input.id === sel ? (e: MIDIMessageEvent) => this.handleMidiIn(e) : null
     }
   }
 
@@ -1408,6 +1486,9 @@ class InstrumentStore {
     if (!data) return
     const ev = parseMidiMessage(data)
     if (!ev) return
+    // Channel filter (§12): Omni passes everything (and is required for MPE-in);
+    // a specific channel accepts only its own messages.
+    if (!this.inputChannelAllowed(ev.channel)) return
     switch (ev.type) {
       case 'noteOn': {
         const key = midiInKey(ev.channel, ev.note)
@@ -1579,31 +1660,56 @@ class InstrumentStore {
     this.mpeAlloc.clear()
   }
 
-  private sendMidi(messages: number[][]): void {
-    if (!this.midiAccess || messages.length === 0) return
+  /**
+   * Resolve the single MIDI output to send to (§12): the device matching
+   * `outputId`, or the first available output when `outputId` is null. Returns
+   * null when a specific saved device is disconnected — notes go NOWHERE rather
+   * than silently to another device.
+   */
+  private resolveOutput(): MIDIOutput | null {
+    if (!this.midiAccess) return null
+    const { outputId } = this.session.midi
     for (const out of this.midiAccess.outputs.values()) {
-      for (const m of messages) out.send(m)
+      if (outputId === null) return out // first available
+      if (out.id === outputId) return out
     }
+    return null // no outputs, or a saved-but-disconnected device → route nowhere
+  }
+
+  private sendMidi(messages: number[][]): void {
+    if (messages.length === 0) return
+    const out = this.resolveOutput()
+    if (!out) return
+    for (const m of messages) out.send(m)
   }
 
   setMidiConfig = (next: MidiConfig): void => {
+    const prev = this.session.midi
     const midi: MidiConfig = {
       inEnabled: !!next.inEnabled,
       outEnabled: !!next.outEnabled,
+      inputId: typeof next.inputId === 'string' ? next.inputId : null,
+      inputChannel: clampInt(next.inputChannel, 0, 16),
+      outputId: typeof next.outputId === 'string' ? next.outputId : null,
       outChannel: clampInt(next.outChannel, 1, 16),
       mpe: !!next.mpe,
     }
-    // Switching output mode/channel remaps channels; flush first so no note hangs
-    // on a channel we're about to stop tracking.
-    const prev = this.session.midi
-    if (midi.mpe !== prev.mpe || midi.outEnabled !== prev.outEnabled || midi.outChannel !== prev.outChannel) {
-      this.midiPanic()
-    }
+    // Any change to the output destination/mode remaps channels or the target
+    // port — flush the CURRENT destination first so no note hangs on it (§12/§21).
+    const outputChanged =
+      midi.mpe !== prev.mpe ||
+      midi.outEnabled !== prev.outEnabled ||
+      midi.outChannel !== prev.outChannel ||
+      midi.outputId !== prev.outputId
+    if (outputChanged) this.midiPanic()
     this.session = { ...this.session, midi }
     if ((midi.inEnabled || midi.outEnabled) && !this.midiReadyFlag) {
       void this.enableMidi()
-    } else if (midi.inEnabled && this.midiAccess) {
+    } else if (this.midiAccess) {
+      // Re-wire so an input-device / channel change takes effect immediately,
+      // and refresh the enumerated ports + routing warning.
       this.wireMidiInputs()
+      this.refreshMidiPorts()
     }
     this.autosave()
     this.emit()

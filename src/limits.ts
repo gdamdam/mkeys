@@ -23,6 +23,9 @@ export const MAX_SESSION_NAME = 200
 export const MAX_PRESET_NAME = 100
 export const MAX_TUNING_NAME = 200
 
+/** Max length of a persisted MIDI device id (§12/§16) — truncated if longer. */
+export const MAX_MIDI_DEVICE_ID = 256
+
 // --- Structural sizes — reject when exceeded ------------------------------
 /** Max notes in a tuning's scale (arbitrary N is supported, but bounded). */
 export const MAX_TUNING_NOTES = 4096

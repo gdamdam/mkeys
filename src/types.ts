@@ -226,6 +226,25 @@ export interface Phrase {
 export interface MidiConfig {
   inEnabled: boolean
   outEnabled: boolean
+  /**
+   * Selected MIDI input device id (§12). `null` = listen to ALL inputs (a safe
+   * merge). A specific id routes only that device; if it's disconnected the app
+   * shows it as such rather than silently listening elsewhere. Stable across
+   * reconnects (Web MIDI keeps the id).
+   */
+  inputId: string | null
+  /**
+   * Input channel filter (§12): 0 = Omni (all channels — required for MPE-in),
+   * 1..16 = accept only that channel.
+   */
+  inputChannel: number
+  /**
+   * Selected MIDI output device id (§12). `null` = the first available output.
+   * There is deliberately NO "all outputs" option: broadcasting to every port
+   * duplicates notes and invites feedback. A specific-but-disconnected id routes
+   * NOWHERE (shown as disconnected) rather than silently to another device.
+   */
+  outputId: string | null
   outChannel: number
   /**
    * MPE output: when true, each voice sends on its own member channel with a

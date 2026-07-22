@@ -48,6 +48,7 @@ import {
 import { isValidTuning, normalizeTuning, periodCents } from '../vendor/tuning-core/model'
 import {
   MAX_DECODED_SHARE_CHARS,
+  MAX_MIDI_DEVICE_ID,
   MAX_PRESET_NAME,
   MAX_SESSION_NAME,
   MAX_SHARE_FRAGMENT_CHARS,
@@ -101,10 +102,10 @@ type CompactReverb = [number, number]
 type CompactSurface = [number, number, number, number, number, number]
 /** [enabled 0/1, modeIdx, division, gate, swing, octaves] */
 type CompactArp = [number, number, number, number, number, number]
-/** [inEnabled 0/1, outEnabled 0/1, outChannel] */
-// [inEnabled, outEnabled, outChannel, mpe?]. mpe appended in 0.2; older 3-element
-// payloads decode with mpe off.
-type CompactMidi = [number, number, number, number?]
+// [inEnabled, outEnabled, outChannel, mpe?, inputChannel?, inputId?, outputId?].
+// mpe appended in 0.2; the routing fields (§12) appended in 0.6. Older 3/4-element
+// payloads decode with mpe off, Omni input, All input, first-available output.
+type CompactMidi = [number, number, number, number?, number?, (string | null)?, (string | null)?]
 /** [pitch, glide, timbre, pressure] */
 type CompactExpr = [number, number, number, number]
 /** [time, typeIdx, degree, octave, expr|null, id?]. `id` (§17) appended in 0.6;
@@ -202,7 +203,15 @@ export function createDefaultSession(): Session {
     macros: { glow: 0.3, motion: 0.3, air: 0.3, grit: 0.3 },
     arp: { enabled: false, mode: 'up', division: 8, gate: 0.8, swing: 0, octaves: 1 },
     chordMode: 'off',
-    midi: { inEnabled: false, outEnabled: false, outChannel: 1, mpe: false },
+    midi: {
+      inEnabled: false,
+      outEnabled: false,
+      inputId: null,
+      inputChannel: 0,
+      outputId: null,
+      outChannel: 1,
+      mpe: false,
+    },
     phrase: null,
   }
 }
@@ -406,11 +415,20 @@ function sanitizeArp(raw: unknown, fb: ArpConfig): ArpConfig {
   }
 }
 
+function idOrNull(v: unknown, fb: string | null): string | null {
+  if (v === null) return null
+  if (typeof v === 'string') return v.length > MAX_MIDI_DEVICE_ID ? v.slice(0, MAX_MIDI_DEVICE_ID) : v
+  return fb
+}
+
 function sanitizeMidi(raw: unknown, fb: MidiConfig): MidiConfig {
   const r = isRecord(raw) ? raw : {}
   return {
     inEnabled: bool(r.inEnabled, fb.inEnabled),
     outEnabled: bool(r.outEnabled, fb.outEnabled),
+    inputId: idOrNull(r.inputId, fb.inputId),
+    inputChannel: int(r.inputChannel, 0, 16, fb.inputChannel),
+    outputId: idOrNull(r.outputId, fb.outputId),
     outChannel: int(r.outChannel, 1, 16, fb.outChannel),
     mpe: bool(r.mpe, fb.mpe),
   }
@@ -581,7 +599,15 @@ function toCompact(s: Session): CompactSession {
       s.arp.octaves,
     ],
     cm: CHORD_MODES.indexOf(s.chordMode),
-    mi: [s.midi.inEnabled ? 1 : 0, s.midi.outEnabled ? 1 : 0, s.midi.outChannel, s.midi.mpe ? 1 : 0],
+    mi: [
+      s.midi.inEnabled ? 1 : 0,
+      s.midi.outEnabled ? 1 : 0,
+      s.midi.outChannel,
+      s.midi.mpe ? 1 : 0,
+      s.midi.inputChannel,
+      s.midi.inputId,
+      s.midi.outputId,
+    ],
     ph: encodePhrase(s.phrase),
     mv: s.masterVolume,
     ig: s.inputGain,
@@ -718,8 +744,17 @@ function fromCompact(raw: unknown): Record<string, unknown> {
       octaves: nn(ar[5]),
     },
     chordMode: fromIdx(CHORD_MODES, raw.cm),
-    // mi[3] (mpe) is absent in pre-0.2 payloads → defaults off.
-    midi: { inEnabled: mi[0] === 1, outEnabled: mi[1] === 1, outChannel: nn(mi[2]), mpe: mi[3] === 1 },
+    // mi[3] (mpe) absent pre-0.2; mi[4..6] (routing, §12) absent pre-0.6 →
+    // sanitizeSession then supplies Omni / All-input / first-output defaults.
+    midi: {
+      inEnabled: mi[0] === 1,
+      outEnabled: mi[1] === 1,
+      outChannel: nn(mi[2]),
+      mpe: mi[3] === 1,
+      inputChannel: nn(mi[4]),
+      inputId: typeof mi[5] === 'string' ? mi[5] : null,
+      outputId: typeof mi[6] === 'string' ? mi[6] : null,
+    },
     phrase: raw.ph === null || raw.ph === undefined ? null : decodePhrase(raw.ph),
     // Pass through untouched: absent in older payloads, where sanitizeSession
     // supplies the default (1) rather than nn()'s 0 (which would be silence).

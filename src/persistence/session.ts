@@ -11,6 +11,7 @@ import { DEFAULT_BPM, MAX_BPM, MIN_BPM, MODES, SESSION_VERSION } from '../types'
 import {
   MAX_JSON_IMPORT_BYTES,
   MAX_KEYBOARD_MAP_DEGREES,
+  MAX_MIDI_DEVICE_ID,
   MAX_PRESET_NAME,
   MAX_SESSION_NAME,
   MAX_TUNING_NAME,
@@ -165,7 +166,15 @@ export function defaultSession(): Session {
     macros: { glow: 0, motion: 0, air: 0, grit: 0 },
     arp: { enabled: false, mode: 'up', division: 4, gate: 0.5, swing: 0, octaves: 1 },
     chordMode: 'off',
-    midi: { inEnabled: false, outEnabled: false, outChannel: 1, mpe: false },
+    midi: {
+      inEnabled: false,
+      outEnabled: false,
+      inputId: null,
+      inputChannel: 0,
+      outputId: null,
+      outChannel: 1,
+      mpe: false,
+    },
     phrase: null,
   }
 }
@@ -303,10 +312,20 @@ function sanitizeArp(v: unknown, d: ArpConfig): ArpConfig {
   }
 }
 
+/** Device id: a bounded string, or null. Non-string/absent → fallback (§12/§16). */
+function idOrNull(v: unknown, fallback: string | null): string | null {
+  if (v === null) return null
+  if (typeof v === 'string') return v.length > MAX_MIDI_DEVICE_ID ? v.slice(0, MAX_MIDI_DEVICE_ID) : v
+  return fallback
+}
+
 function sanitizeMidi(v: unknown, d: MidiConfig): MidiConfig {
   return {
     inEnabled: bool(prop(v, 'inEnabled'), d.inEnabled),
     outEnabled: bool(prop(v, 'outEnabled'), d.outEnabled),
+    inputId: idOrNull(prop(v, 'inputId'), d.inputId),
+    inputChannel: int(prop(v, 'inputChannel'), 0, 16, d.inputChannel),
+    outputId: idOrNull(prop(v, 'outputId'), d.outputId),
     outChannel: int(prop(v, 'outChannel'), 1, 16, d.outChannel),
     mpe: bool(prop(v, 'mpe'), d.mpe),
   }
