@@ -10,6 +10,7 @@ import { IconButton, RecordIcon, ShareIcon, StopIcon } from './ui'
 import { useInstrument } from '../app/useInstrument'
 import { exportSessionJSON, importSessionJSON } from '../persistence/session'
 import { sessionToShareUrl } from '../sharing/codec'
+import { MAX_JSON_IMPORT_BYTES } from '../limits'
 import './panels.css'
 
 
@@ -80,6 +81,11 @@ export function SessionBar() {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
+    // Reject an oversized file before reading it into memory (§16).
+    if (file.size > MAX_JSON_IMPORT_BYTES) {
+      flash(`That file is too large (max ${Math.round(MAX_JSON_IMPORT_BYTES / 1024 / 1024)} MB).`, true)
+      return
+    }
     const text = await file.text()
     const imported = importSessionJSON(text)
     if (!imported) {

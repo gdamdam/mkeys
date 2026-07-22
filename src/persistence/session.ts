@@ -8,6 +8,16 @@
  */
 
 import { DEFAULT_BPM, MAX_BPM, MIN_BPM, MODES, SESSION_VERSION } from '../types'
+import {
+  MAX_JSON_IMPORT_BYTES,
+  MAX_KEYBOARD_MAP_DEGREES,
+  MAX_PRESET_NAME,
+  MAX_SESSION_NAME,
+  MAX_TUNING_NAME,
+  MAX_TUNING_NOTES,
+  byteLength,
+  clampName,
+} from '../limits'
 import { isValidTuning, normalizeTuning } from '../vendor/tuning-core/model'
 import type {
   ArpConfig,
@@ -358,7 +368,8 @@ export function sanitizeSession(raw: unknown): Session {
   const d = defaultSession()
   const s: Session = {
     version: SESSION_VERSION,
-    name: str(prop(raw, 'name'), d.name),
+    // Names are display-only → safe to truncate to a documented max (§16).
+    name: clampName(str(prop(raw, 'name'), d.name), MAX_SESSION_NAME),
     bpm: num(prop(raw, 'bpm'), MIN_BPM, MAX_BPM, d.bpm),
     keyRoot: int(prop(raw, 'keyRoot'), 0, 11, d.keyRoot),
     mode: oneOf<Mode>(prop(raw, 'mode'), MODES, d.mode),
@@ -381,22 +392,35 @@ export function sanitizeSession(raw: unknown): Session {
   const keyboardMap = tuning ? sanitizeKeyboardMap(prop(raw, 'keyboardMap')) : undefined
   if (keyboardMap) s.keyboardMap = keyboardMap
   const presetName = prop(raw, 'presetName')
-  if (typeof presetName === 'string') s.presetName = presetName
+  if (typeof presetName === 'string') s.presetName = clampName(presetName, MAX_PRESET_NAME)
   return s
 }
 
-/** Accept a tuning only if it is a valid PortableTuning; else undefined (12-TET). */
+/**
+ * Accept a tuning only if it is a valid PortableTuning within the note-count
+ * limit; else undefined (12-TET). The length pre-check runs before the O(n)
+ * validation/normalisation so a hostile scaleCents array can't force unbounded
+ * work (§16). The display name is truncated.
+ */
 function sanitizeTuning(raw: unknown): PortableTuning | undefined {
-  return isValidTuning(raw) ? normalizeTuning(raw) : undefined
+  const cents = prop(raw, 'scaleCents')
+  if (Array.isArray(cents) && cents.length > MAX_TUNING_NOTES) return undefined
+  if (!isValidTuning(raw)) return undefined
+  const t = normalizeTuning(raw)
+  return { ...t, name: clampName(t.name, MAX_TUNING_NAME) }
 }
 
-/** Accept a `.kbm` keyboard map (refNote + integer degree list); else undefined. */
+/** Accept a `.kbm` keyboard map (refNote + bounded integer degree list); else undefined. */
 function sanitizeKeyboardMap(raw: unknown): KeyboardMap | undefined {
   if (!isObject(raw)) return undefined
   const refNote = prop(raw, 'refNote')
   const degrees = prop(raw, 'degrees')
   if (typeof refNote !== 'number' || !Number.isFinite(refNote)) return undefined
-  if (!Array.isArray(degrees) || degrees.length === 0) return undefined
+  // Reject (not truncate) an over-long map — clipping it would change which
+  // MIDI keys sound which degrees (§16). Check length before the .map().
+  if (!Array.isArray(degrees) || degrees.length === 0 || degrees.length > MAX_KEYBOARD_MAP_DEGREES) {
+    return undefined
+  }
   const clean = degrees.map((d) => (typeof d === 'number' && Number.isInteger(d) ? d : -1))
   return { refNote: Math.trunc(refNote), degrees: clean }
 }
@@ -427,6 +451,9 @@ export function exportSessionJSON(s: Session): string {
  * is not valid JSON; any parseable value yields a valid Session.
  */
 export function importSessionJSON(text: string): Session | null {
+  // Reject an oversized payload BEFORE parsing so a hostile file can't force a
+  // huge allocation (§16). Callers with a File should also check `File.size`.
+  if (byteLength(text) > MAX_JSON_IMPORT_BYTES) return null
   let parsed: unknown
   try {
     parsed = JSON.parse(text)

@@ -46,6 +46,15 @@ import {
   type PortableTuning,
 } from '../types'
 import { isValidTuning, normalizeTuning, periodCents } from '../vendor/tuning-core/model'
+import {
+  MAX_DECODED_SHARE_CHARS,
+  MAX_PRESET_NAME,
+  MAX_SESSION_NAME,
+  MAX_SHARE_FRAGMENT_CHARS,
+  MAX_TUNING_NAME,
+  MAX_TUNING_NOTES,
+  clampName,
+} from '../limits'
 
 /** Stable URL-fragment param key: `…#k=<payload>`. */
 const FRAGMENT_KEY = 'k'
@@ -430,9 +439,15 @@ function sanitizeEvent(raw: unknown): PhraseEvent | null {
   return event
 }
 
-/** Accept a tuning only if it is a valid PortableTuning; else undefined (12-TET). */
+/** Accept a bounded, valid PortableTuning; else undefined (12-TET). Length is
+ *  checked before the O(n) validation so a hostile scaleCents can't force
+ *  unbounded work (§16); the display name is truncated. */
 function sanitizeTuning(raw: unknown): PortableTuning | undefined {
-  return isValidTuning(raw) ? normalizeTuning(raw) : undefined
+  const cents = isRecord(raw) ? raw.scaleCents : undefined
+  if (Array.isArray(cents) && cents.length > MAX_TUNING_NOTES) return undefined
+  if (!isValidTuning(raw)) return undefined
+  const t = normalizeTuning(raw)
+  return { ...t, name: clampName(t.name, MAX_TUNING_NAME) }
 }
 
 function sanitizePhrase(raw: unknown): Phrase | null {
@@ -456,7 +471,7 @@ export function sanitizeSession(raw: unknown): Session {
   const r = isRecord(raw) ? raw : {}
   const session: Session = {
     version: SESSION_VERSION,
-    name: str(r.name, fb.name),
+    name: clampName(str(r.name, fb.name), MAX_SESSION_NAME), // display-only → truncate (§16)
     bpm: num(r.bpm, MIN_BPM, MAX_BPM, fb.bpm),
     keyRoot: int(r.keyRoot, 0, 11, fb.keyRoot),
     mode: coerceEnum<Mode>(r.mode, MODES, fb.mode),
@@ -478,7 +493,7 @@ export function sanitizeSession(raw: unknown): Session {
   }
   const tuning = sanitizeTuning(r.tuning)
   if (tuning) session.tuning = tuning
-  if (typeof r.presetName === 'string') session.presetName = r.presetName
+  if (typeof r.presetName === 'string') session.presetName = clampName(r.presetName, MAX_PRESET_NAME)
   return session
 }
 
@@ -767,12 +782,17 @@ export function encodeSession(session: Session): string {
  */
 export function decodeSession(str: string): Session | null {
   if (typeof str !== 'string' || str.length === 0) return null
+  // Reject an over-long fragment BEFORE Base64-decoding it (§16): the decode
+  // allocates a string proportional to the input, so bound the input first.
+  if (str.length > MAX_SHARE_FRAGMENT_CHARS) return null
   let json: string
   try {
     json = base64ToUtf8(str)
   } catch {
     return null
   }
+  // Belt-and-suspenders: bound the decoded JSON before parsing it.
+  if (json.length > MAX_DECODED_SHARE_CHARS) return null
   let parsed: unknown
   try {
     parsed = JSON.parse(json)

@@ -22,6 +22,13 @@
  */
 
 import { MAX_BPM, MIN_BPM } from '../types'
+import {
+  MAX_KBM_BYTES,
+  MAX_KEYBOARD_MAP_DEGREES,
+  MAX_SCL_BYTES,
+  MAX_TUNING_NOTES,
+  byteLength,
+} from '../limits'
 import type {
   ArpConfig,
   ChordMode,
@@ -476,8 +483,16 @@ class InstrumentStore {
    * Throws (via the vendored parser) on malformed input — the UI catches it.
    */
   importSclFile = (text: string): void => {
+    // Bound the file before parsing, and the resulting scale before it sounds (§16).
+    if (byteLength(text) > MAX_SCL_BYTES) {
+      throw new Error('That .scl file is too large to import.')
+    }
     const tonicHz = this.session.tuning?.tonicHz ?? DEFAULT_TONIC_HZ
-    this.setTuning(importSclText(text, tonicHz))
+    const tuning = importSclText(text, tonicHz)
+    if (tuning.scaleCents.length > MAX_TUNING_NOTES) {
+      throw new Error(`That scale has too many notes (max ${MAX_TUNING_NOTES}).`)
+    }
+    this.setTuning(tuning)
   }
 
   /**
@@ -487,7 +502,13 @@ class InstrumentStore {
    * own). Throws on malformed input.
    */
   importKbmFile = (text: string): void => {
+    if (byteLength(text) > MAX_KBM_BYTES) {
+      throw new Error('That .kbm file is too large to import.')
+    }
     const kbm = parseKbm(text)
+    if (kbm.degrees.length > MAX_KEYBOARD_MAP_DEGREES) {
+      throw new Error(`That .kbm has too many entries (max ${MAX_KEYBOARD_MAP_DEGREES}).`)
+    }
     // A .kbm carries no scale; apply it over the active tuning, or establish a
     // 12-TET one so the map is honoured even from the standard state.
     const base = this.session.tuning ?? BUILTIN_PORTABLE_TUNINGS[0]
