@@ -4,10 +4,15 @@ import App from './App'
 // Self-hosted character fonts (no Google CDN — offline + privacy-safe):
 // Fraunces (warm display serif) for identity, Space Grotesk for UI chrome,
 // Space Mono for the musical readouts.
+// Variable display/UI fonts keep their curated subsets (latin + latin-ext +
+// vietnamese) so accented / Vietnamese session & tuning names still render.
+// Space Mono is used ONLY for numeric readouts (digits + units are ASCII), so
+// it's pinned to the latin subset — dropping its latin-ext + vietnamese faces
+// from the build and the SW precache (§19).
 import '@fontsource-variable/fraunces/index.css'
 import '@fontsource-variable/space-grotesk/index.css'
-import '@fontsource/space-mono/400.css'
-import '@fontsource/space-mono/700.css'
+import '@fontsource/space-mono/latin-400.css'
+import '@fontsource/space-mono/latin-700.css'
 import './styles/global.css'
 
 const rootElement = document.getElementById('root')

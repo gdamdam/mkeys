@@ -54,6 +54,11 @@ self.addEventListener('activate', (event) => {
     caches.keys()
       .then((keys) => Promise.all(
         keys
+          // Only ever delete mkeys-OWNED caches (§19): the origin can be shared
+          // (localhost:5173 across Vite projects; multiple apps under one host),
+          // so never purge another app's caches. Within our own namespace, drop
+          // every prior deploy in prod, and all of them in dev to heal.
+          .filter((key) => key.startsWith('mkeys-'))
           .filter((key) => IS_DEV || (key !== SHELL_CACHE && key !== RUNTIME_CACHE))
           .map((key) => caches.delete(key)),
       ))
