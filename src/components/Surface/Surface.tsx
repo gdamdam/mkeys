@@ -249,8 +249,13 @@ export function Surface({ className }: SurfaceProps) {
       role="application"
       aria-label="Playing surface"
       style={{
-        gridTemplateColumns: `repeat(${surface.cols}, 1fr)`,
-        gridTemplateRows: `repeat(${surface.rows}, 1fr)`,
+        // Explicit zero-minimum tracks (§1): `1fr` is `minmax(auto, 1fr)`, whose
+        // `auto` floor can let a track exceed its share and overflow (clipped by
+        // `overflow:hidden`) on short viewports — after which the uniform pointer
+        // hit-test no longer matches the visible pads. `minmax(0, 1fr)` forces
+        // every row/column to fit the container exactly.
+        gridTemplateColumns: `repeat(${surface.cols}, minmax(0, 1fr))`,
+        gridTemplateRows: `repeat(${surface.rows}, minmax(0, 1fr))`,
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
