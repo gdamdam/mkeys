@@ -251,6 +251,43 @@ describe('MIDI-out MPE (microtonal)', () => {
     expect(bends.some((b) => Math.abs(bendValue(b)) > 0)).toBe(true)
   })
 
+  it('resets the bend to centre when an MPE voice is released (§21)', () => {
+    instrumentStore.setTuning(JUST)
+    instrumentStore.setMidiConfig({ inEnabled: false, outEnabled: true, outChannel: 1, mpe: true })
+    const sent = captureMidiOut()
+    const vId = priv.noteOnAt(2, 4, DEFAULT_EXPR) // a tuned degree → off-centre bend
+    const onChannel = chan(sent.filter(isNoteOn)[0])
+    sent.length = 0
+    instrumentStore.noteOffVoice(vId)
+    // The release must carry a centre bend (value 0) on that member channel.
+    const centreBends = sent.filter((m) => isBend(m) && chan(m) === onChannel && bendValue(m) === 0)
+    expect(centreBends.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('steals a channel with a correct note-off past 15 voices, no hung notes (§21)', () => {
+    instrumentStore.setTuning(JUST)
+    instrumentStore.setMidiConfig({ inEnabled: false, outEnabled: true, outChannel: 1, mpe: true })
+    const sent = captureMidiOut()
+    // 16 simultaneous voices — one more than the 15 MPE member channels.
+    for (let i = 0; i < 16; i++) priv.noteOnAt(i % 7, 4, DEFAULT_EXPR)
+    const noteOns = sent.filter(isNoteOn).length
+    const noteOffs = sent.filter((m) => (m[0] & 0xf0) === 0x80).length
+    expect(noteOns).toBe(16)
+    // The 16th note stole a channel, which must have flushed exactly one voice.
+    expect(noteOffs).toBe(1)
+  })
+
+  it('panic sends note-offs and neutralises bends across MPE channels (§21)', () => {
+    instrumentStore.setTuning(JUST)
+    instrumentStore.setMidiConfig({ inEnabled: false, outEnabled: true, outChannel: 1, mpe: true })
+    priv.noteOnAt(2, 4, DEFAULT_EXPR)
+    priv.noteOnAt(4, 4, DEFAULT_EXPR)
+    const sent = captureMidiOut()
+    instrumentStore.panic()
+    expect(sent.filter((m) => (m[0] & 0xf0) === 0x80).length).toBeGreaterThanOrEqual(2)
+    expect(sent.some((m) => isBend(m) && bendValue(m) === 0)).toBe(true)
+  })
+
   it('stays single-channel with no pitch bend when MPE is off', () => {
     instrumentStore.setTuning(JUST)
     instrumentStore.setMidiConfig({ inEnabled: false, outEnabled: true, outChannel: 3, mpe: false })

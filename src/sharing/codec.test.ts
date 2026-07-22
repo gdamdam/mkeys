@@ -31,6 +31,17 @@ function makeSession(overrides: Partial<Session> = {}): Session {
   return sanitizeSession({ ...base, ...overrides })
 }
 
+describe('deprecated unison chord mode in share links (§7)', () => {
+  it('decodes a legacy unison (compact index 1) to off', () => {
+    // Hand-craft a compact payload that still encodes chordMode index 1 (unison).
+    const s = makeSession()
+    const compact = JSON.parse(decodeWire(encodeSession(s))) as Record<string, unknown>
+    compact.cm = 1 // legacy 'unison' index
+    const back = decodeSession(b64(compact))
+    expect(back?.chordMode).toBe('off')
+  })
+})
+
 describe('stored BPM in share links (§10)', () => {
   it('round-trips local BPM through a share link', () => {
     const s = makeSession({ bpm: 96 })

@@ -28,9 +28,10 @@ const ARP_MODES: ReadonlyArray<SegmentedOption<ArpConfig['mode']>> = [
   { value: 'random', label: 'Random' },
 ]
 
+// §7: 'unison' is intentionally absent — it duplicated 'off' (patch unison does
+// the thickening). Stored/shared 'unison' values migrate to 'off' in the sanitizer.
 const CHORD_MODES: ReadonlyArray<SegmentedOption<ChordMode>> = [
   { value: 'off', label: 'Off' },
-  { value: 'unison', label: 'Unison' },
   { value: 'fifth', label: 'Fifth' },
   { value: 'octave', label: 'Octave' },
   { value: 'triad', label: 'Triad' },

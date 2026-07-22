@@ -86,6 +86,11 @@ const LFO_TARGETS = ['pitch', 'filter', 'amp'] as const
 const GLIDE_MODES = ['legato', 'always', 'off'] as const
 const ARP_MODES = ['up', 'down', 'updown', 'random'] as const
 const CHORD_MODES: readonly ChordMode[] = ['off', 'unison', 'fifth', 'octave', 'triad']
+
+/** Migrate the deprecated 'unison' chord mode to 'off' (§7); pass others through. */
+function migrateChordMode(m: ChordMode): ChordMode {
+  return m === 'unison' ? 'off' : m
+}
 const LAYOUTS = ['grid', 'piano'] as const
 const PHRASE_EVENT_TYPES = ['on', 'off'] as const
 
@@ -364,7 +369,9 @@ export function sanitizeSession(raw: unknown): Session {
     inputGain: num(prop(raw, 'inputGain'), 0, 2, d.inputGain),
     macros: sanitizeMacros(prop(raw, 'macros'), d.macros),
     arp: sanitizeArp(prop(raw, 'arp'), d.arp),
-    chordMode: oneOf<ChordMode>(prop(raw, 'chordMode'), CHORD_MODES, d.chordMode),
+    // §7: the deprecated 'unison' chord mode (identical to 'off') migrates to
+    // 'off'. The literal stays in CHORD_MODES for index-stable share decoding.
+    chordMode: migrateChordMode(oneOf<ChordMode>(prop(raw, 'chordMode'), CHORD_MODES, d.chordMode)),
     midi: sanitizeMidi(prop(raw, 'midi'), d.midi),
     phrase: sanitizePhrase(prop(raw, 'phrase')),
   }

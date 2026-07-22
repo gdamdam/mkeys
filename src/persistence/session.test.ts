@@ -37,6 +37,16 @@ describe('stored BPM (§10)', () => {
   })
 })
 
+describe('deprecated unison chord mode (§7)', () => {
+  it('migrates a stored unison chord mode to off', () => {
+    expect(sanitizeSession({ chordMode: 'unison' }).chordMode).toBe('off')
+  })
+  it('leaves other chord modes untouched', () => {
+    expect(sanitizeSession({ chordMode: 'triad' }).chordMode).toBe('triad')
+    expect(sanitizeSession({ chordMode: 'fifth' }).chordMode).toBe('fifth')
+  })
+})
+
 describe('defaultSession', () => {
   it('produces a self-consistent, current-version session', () => {
     const s = defaultSession()

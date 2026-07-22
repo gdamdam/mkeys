@@ -1432,13 +1432,29 @@ class InstrumentStore {
   private midiSendNoteOff(engineId: number): void {
     if (!this.midiAccess) return
     // Always flush a tracked off, even if output was toggled off mid-note.
-    this.sendMidi(this.ownership.noteOff(engineId))
+    const offs = this.ownership.noteOff(engineId)
+    const messages: number[][] = [...offs]
+    // §21: reset the per-note bend to centre on the released MPE member channel
+    // so a stale bend never colours the next note that reuses it, and receivers
+    // see a clean neutral channel.
+    if (this.session.midi.mpe && offs.length > 0) {
+      messages.push(pitchBendBytes(0, offs[0][0] & 0x0f))
+    }
+    this.sendMidi(messages)
     this.mpeAlloc.release(engineId)
   }
 
   private midiPanic(): void {
     if (!this.midiAccess) return
-    this.sendMidi(this.ownership.panic())
+    const offs = this.ownership.panic()
+    const messages: number[][] = [...offs]
+    // §21: neutralise the bend on every channel we just silenced (MPE).
+    if (this.session.midi.mpe) {
+      for (const ch of new Set(offs.map((m) => m[0] & 0x0f))) {
+        messages.push(pitchBendBytes(0, ch))
+      }
+    }
+    this.sendMidi(messages)
     this.mpeAlloc.clear()
   }
 

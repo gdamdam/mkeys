@@ -188,7 +188,16 @@ export interface ArpConfig {
   octaves: number
 }
 
-/** How a single played key expands into multiple notes. */
+/**
+ * How a single played key expands into multiple notes.
+ *
+ * `'unison'` is DEPRECATED (§7): it was always behaviourally identical to
+ * `'off'` — thickening is the *patch's* unison voices, not logical note
+ * stacking — so it was removed from the UI and the sanitizer migrates a stored
+ * `'unison'` to `'off'`. The literal is retained in this union and in the codec
+ * enum arrays (which are APPEND-ONLY) so existing share links / sessions that
+ * encode it by index still decode; it must never be reordered or reused.
+ */
 export type ChordMode = 'off' | 'unison' | 'fifth' | 'octave' | 'triad'
 
 /** A recorded note-on/off within a phrase, in beat time. */

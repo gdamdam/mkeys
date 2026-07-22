@@ -467,7 +467,12 @@ export function sanitizeSession(raw: unknown): Session {
     inputGain: num(r.inputGain, 0, 2, fb.inputGain),
     macros: sanitizeMacros(r.macros, fb.macros),
     arp: sanitizeArp(r.arp, fb.arp),
-    chordMode: coerceEnum<ChordMode>(r.chordMode, CHORD_MODES, fb.chordMode),
+    // §7: deprecated 'unison' (identical to 'off') migrates to 'off'; the literal
+    // stays in CHORD_MODES so legacy share links that encode index 1 still decode.
+    chordMode: (() => {
+      const m = coerceEnum<ChordMode>(r.chordMode, CHORD_MODES, fb.chordMode)
+      return m === 'unison' ? 'off' : m
+    })(),
     midi: sanitizeMidi(r.midi, fb.midi),
     phrase: r.phrase === null || r.phrase === undefined ? null : sanitizePhrase(r.phrase),
   }
