@@ -24,10 +24,12 @@ const SESSION_STORE = 'sessions'
  */
 export const AUTOSAVE_KEY = 'autosave'
 
-/** A stored session record: a sanitized Session plus its lookup id. */
+/** A stored session record: a sanitized Session plus its lookup id + save time. */
 export interface StoredSession {
   id: string
   session: Session
+  /** Epoch millis of the last write (§15). Absent on records saved before this. */
+  updatedAt?: number
 }
 
 /** True when the IndexedDB API is available in the current environment. */
@@ -125,7 +127,7 @@ export async function get(id: string): Promise<Session | null> {
 
 /** Store a session under `id`. Resolves true on success, false on failure. */
 export async function put(id: string, session: Session): Promise<boolean> {
-  const record: StoredSession = { id, session: sanitizeSession(session) }
+  const record: StoredSession = { id, session: sanitizeSession(session), updatedAt: Date.now() }
   const result = await withStore('readwrite', async (store) => {
     store.put(record)
     // Report success only once the transaction commits (see txToPromise).
@@ -153,7 +155,7 @@ export async function list(): Promise<StoredSession[]> {
     // The reserved autosave slot is not a named session — never surface it (§5).
     return all
       .filter((rec) => rec.id !== AUTOSAVE_KEY)
-      .map((rec) => ({ id: rec.id, session: sanitizeSession(rec.session) }))
+      .map((rec) => ({ id: rec.id, session: sanitizeSession(rec.session), updatedAt: rec.updatedAt }))
   })
   return result ?? []
 }

@@ -68,6 +68,13 @@ export interface SavedSessionMeta {
   updatedAt?: number
 }
 
+/**
+ * Truthful result of a session-library operation (§15). Success is reported
+ * ONLY after the IndexedDB transaction actually commits; failures carry a short,
+ * user-facing, actionable message (unavailable storage, quota, missing record…).
+ */
+export type OpResult = { ok: true } | { ok: false; error: string }
+
 /** Ableton-Link-style status. The bridge is optional; `enabled` gates it. */
 export interface LinkStatus {
   enabled: boolean
@@ -148,9 +155,12 @@ export interface Instrument {
 
   // --- session library -----------------------------------------------------
   savedSessions: SavedSessionMeta[]
-  saveSession: (name: string) => void | Promise<void>
-  loadSession: (id: string) => void | Promise<void>
-  deleteSession: (id: string) => void | Promise<void>
+  /** Persist the current session under `name`. Resolves a truthful {@link OpResult} (§15). */
+  saveSession: (name: string) => Promise<OpResult>
+  /** Load a saved session by id. Resolves a truthful {@link OpResult} (§15). */
+  loadSession: (id: string) => Promise<OpResult>
+  /** Delete a saved session by id. Resolves a truthful {@link OpResult} (§15). */
+  deleteSession: (id: string) => Promise<OpResult>
   /** Load a full session object (used by JSON import + share links). */
   applySession: (session: Session) => void
 

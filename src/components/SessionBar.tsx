@@ -23,6 +23,7 @@ export function SessionBar() {
   const { session, savedSessions } = inst
   const [name, setName] = useState('')
   const [toast, setToast] = useState<Toast | null>(null)
+  const [busy, setBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -32,28 +33,47 @@ export function SessionBar() {
     toastTimer.current = setTimeout(() => setToast(null), 2600)
   }
 
-  const onSave = (): void => {
+  const onSave = async (): Promise<void> => {
+    if (busy) return // debounce: no duplicate saves from rapid clicks (§15)
     const trimmed = name.trim()
     if (!trimmed) {
       flash('Name the session before saving.', true)
       return
     }
-    void inst.saveSession(trimmed)
-    setName('')
-    flash(`Saved "${trimmed}".`)
+    setBusy(true)
+    // Announce success only after the write actually commits; on failure keep
+    // the typed name so the user can retry (§15).
+    const res = await inst.saveSession(trimmed)
+    setBusy(false)
+    if (res.ok) {
+      setName('')
+      flash(`Saved "${trimmed}".`)
+    } else {
+      flash(res.error, true)
+    }
   }
 
   const onExport = (): void => {
     const json = exportSessionJSON(session)
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const safe = (session.name || 'mkeys-session').replace(/[^\w.-]+/g, '-')
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${safe}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-    flash('Session exported.')
+    // A safe, non-empty filename even if the name is all punctuation/unicode (§22).
+    const cleaned = (session.name || '').replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '')
+    const safe = cleaned.slice(0, 64) || 'mkeys-session'
+    try {
+      const blob = new Blob([json], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${safe}.json`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      // Revoke after a browser-safe delay, not synchronously, so the download
+      // isn't cancelled before it starts in some browsers (§22).
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      flash('Session exported.')
+    } catch {
+      flash('Export failed — could not create the download.', true)
+    }
   }
 
   const onImportFile = async (e: ChangeEvent<HTMLInputElement>): Promise<void> => {
@@ -99,11 +119,11 @@ export function SessionBar() {
             aria-label="Session name"
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') onSave()
+              if (e.key === 'Enter') void onSave()
             }}
           />
-          <button type="button" className="pbtn" onClick={onSave}>
-            Save
+          <button type="button" className="pbtn" onClick={() => void onSave()} disabled={busy}>
+            {busy ? 'Saving…' : 'Save'}
           </button>
         </div>
 
@@ -119,10 +139,27 @@ export function SessionBar() {
                     {new Date(s.updatedAt).toLocaleDateString()}
                   </span>
                 ) : null}
-                <button type="button" className="pbtn" onClick={() => void inst.loadSession(s.id)}>
+                <button
+                  type="button"
+                  className="pbtn"
+                  onClick={() => {
+                    void inst.loadSession(s.id).then((r) => {
+                      if (r.ok) flash(`Loaded "${s.name}".`)
+                      else flash(r.error, true)
+                    })
+                  }}
+                >
                   Load
                 </button>
-                <button type="button" className="pbtn" onClick={() => void inst.deleteSession(s.id)}>
+                <button
+                  type="button"
+                  className="pbtn"
+                  onClick={() => {
+                    void inst.deleteSession(s.id).then((r) => {
+                      if (!r.ok) flash(r.error, true)
+                    })
+                  }}
+                >
                   Delete
                 </button>
               </li>

@@ -40,6 +40,7 @@ import type {
   GridCell,
   Instrument,
   LinkStatus,
+  OpResult,
   RecorderState,
   RecorderStatus,
   SavedSessionMeta,
@@ -1152,29 +1153,39 @@ class InstrumentStore {
 
   private async refreshSavedSessions(): Promise<void> {
     const all = await db.list()
-    this.savedSessions = all.map((r) => ({ id: r.id, name: r.session.name }))
+    this.savedSessions = all.map((r) => ({ id: r.id, name: r.session.name, updatedAt: r.updatedAt }))
     this.emit()
   }
 
-  saveSession = async (name: string): Promise<void> => {
+  saveSession = async (name: string): Promise<OpResult> => {
     const session: Session = { ...this.session, name }
-    await db.put(uuid(), session)
+    // Report success ONLY once the write actually commits (§15). db.put resolves
+    // false on unavailable/blocked/quota/aborted; surface that truthfully.
+    const ok = await db.put(uuid(), session)
+    if (!ok) {
+      return { ok: false, error: 'Save failed — local storage may be unavailable or full.' }
+    }
     // The user has committed this session; autosave may resume for it.
     this.loadedFromUrl = false
     await this.refreshSavedSessions()
+    return { ok: true }
   }
 
-  loadSession = async (id: string): Promise<void> => {
+  loadSession = async (id: string): Promise<OpResult> => {
     // The autosave slot is not a user session — never loadable as one (§5).
-    if (id === db.AUTOSAVE_KEY) return
+    if (id === db.AUTOSAVE_KEY) return { ok: false, error: 'That entry cannot be loaded.' }
     const s = await db.get(id)
-    if (s) this.applySession(s)
+    if (!s) return { ok: false, error: 'Could not load that session — it may be missing.' }
+    this.applySession(s)
+    return { ok: true }
   }
 
-  deleteSession = async (id: string): Promise<void> => {
-    if (id === db.AUTOSAVE_KEY) return // guard the reserved slot (§5)
-    await db.del(id)
+  deleteSession = async (id: string): Promise<OpResult> => {
+    if (id === db.AUTOSAVE_KEY) return { ok: false, error: 'That entry cannot be deleted.' }
+    const ok = await db.del(id)
+    if (!ok) return { ok: false, error: 'Delete failed — local storage may be unavailable.' }
     await this.refreshSavedSessions()
+    return { ok: true }
   }
 
   applySession = (session: Session): void => {
