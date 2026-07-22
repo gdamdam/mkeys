@@ -578,8 +578,18 @@ class InstrumentStore {
 
   // ------------------------------------------------------------------ tempo
 
+  /**
+   * Whether Link authoritatively owns tempo (§2). Ownership requires BOTH that
+   * the user enabled Link AND that the bridge is connected — a bare auto-detect
+   * (connected but not user-enabled) discovers availability but must NOT take
+   * control. When this is false, local BPM + tap tempo always win.
+   */
+  private linkOwnsTempo(): boolean {
+    return this.linkEnabledFlag && this.linkState.connected
+  }
+
   private computeEffectiveBpm(): number {
-    return this.linkState.connected ? this.linkState.tempo : this.bpm
+    return this.linkOwnsTempo() ? this.linkState.tempo : this.bpm
   }
 
   private applyTempo(): void {
@@ -590,8 +600,10 @@ class InstrumentStore {
   }
 
   setBpm = (bpm: number): void => {
+    // Always store the local BPM so it can be restored the moment Link is
+    // disabled (§2). It only drives the engine when Link isn't the owner.
     this.bpm = Math.min(999, Math.max(20, bpm))
-    if (!this.linkState.connected) {
+    if (!this.linkOwnsTempo()) {
       this.applyTempo()
       sendLinkTempo(this.bpm)
     }
@@ -1437,20 +1449,21 @@ class InstrumentStore {
   // ------------------------------------------------------------------ Link
 
   private onLink(state: LinkState): void {
-    const wasConnected = this.linkState.connected
     this.linkState = state
-    // Link owns tempo while connected; recompute + push downstream.
+    // Recompute effective tempo and push it downstream. When Link doesn't own
+    // tempo (not user-enabled, or dropped) this cleanly restores local BPM;
+    // when it does, it adopts the shared tempo. applyTempo reads linkOwnsTempo,
+    // so a bare auto-detect connection never seizes control (§2).
     this.applyTempo()
-    if (wasConnected !== state.connected && !state.connected) {
-      // Link dropped: fall back to local bpm cleanly.
-      this.applyTempo()
-    }
     this.emit()
   }
 
   toggleLink = (): void => {
     this.linkEnabledFlag = !this.linkEnabledFlag
     enableLinkBridge(this.linkEnabledFlag)
+    // Adopt Link tempo on enable (if already connected), or immediately restore
+    // the stored local BPM on disable — no waiting for the next bridge message.
+    this.applyTempo()
     this.emit()
   }
 

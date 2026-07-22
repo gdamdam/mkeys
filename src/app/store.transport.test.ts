@@ -103,6 +103,20 @@ interface StorePrivates {
   recorderState: string
   startedFlag: boolean
   startPromise: Promise<void> | null
+  linkEnabledFlag: boolean
+  onLink(state: {
+    tempo: number
+    beat: number
+    phase: number
+    playing: boolean
+    peers: number
+    clients: number
+    connected: boolean
+  }): void
+}
+
+function linkState(connected: boolean, tempo: number) {
+  return { tempo, beat: 0, phase: 0, playing: false, peers: connected ? 1 : 0, clients: 1, connected }
 }
 
 const priv = instrumentStore as unknown as StorePrivates
@@ -174,6 +188,54 @@ describe('§6 phrase lookahead cancellation', () => {
     vi.advanceTimersByTime(1000)
     // No stray playback voice bled into the take.
     expect(priv.phraseVoiceIds.size).toBe(0)
+  })
+})
+
+describe('§2 Ableton Link tempo ownership', () => {
+  beforeEach(() => {
+    instrumentStore.panic()
+    // Start every case Link-disabled and disconnected at a known local tempo.
+    if (priv.linkEnabledFlag) instrumentStore.toggleLink()
+    priv.onLink(linkState(false, 120))
+    instrumentStore.setBpm(100)
+  })
+
+  it('auto-detected (connected) but not enabled does NOT take tempo', () => {
+    priv.onLink(linkState(true, 140)) // bridge auto-detected + connected
+    expect(instrumentStore.getSnapshot().link.connected).toBe(true)
+    expect(instrumentStore.getSnapshot().link.enabled).toBe(false)
+    expect(instrumentStore.getSnapshot().effectiveBpm).toBe(100) // local still owns
+  })
+
+  it('local + tap tempo always work while Link is off', () => {
+    priv.onLink(linkState(true, 140)) // connected but disabled
+    instrumentStore.setBpm(85)
+    expect(instrumentStore.getSnapshot().effectiveBpm).toBe(85)
+  })
+
+  it('enabling Link while connected adopts the shared tempo', () => {
+    priv.onLink(linkState(true, 140))
+    instrumentStore.toggleLink() // user enables Link
+    expect(instrumentStore.getSnapshot().link.enabled).toBe(true)
+    expect(instrumentStore.getSnapshot().effectiveBpm).toBe(140)
+  })
+
+  it('disabling Link immediately restores the stored local BPM', () => {
+    priv.onLink(linkState(true, 140))
+    instrumentStore.toggleLink() // enable → 140
+    expect(instrumentStore.getSnapshot().effectiveBpm).toBe(140)
+    instrumentStore.toggleLink() // disable → back to local 100
+    expect(instrumentStore.getSnapshot().effectiveBpm).toBe(100)
+  })
+
+  it('a disconnect while enabled falls back to local; reconnect re-adopts', () => {
+    priv.onLink(linkState(true, 140))
+    instrumentStore.toggleLink() // enabled + connected → 140
+    expect(instrumentStore.getSnapshot().effectiveBpm).toBe(140)
+    priv.onLink(linkState(false, 140)) // bridge dropped
+    expect(instrumentStore.getSnapshot().effectiveBpm).toBe(100) // local fallback
+    priv.onLink(linkState(true, 128)) // reconnect at a new tempo
+    expect(instrumentStore.getSnapshot().effectiveBpm).toBe(128)
   })
 })
 
