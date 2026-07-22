@@ -335,6 +335,9 @@ function sanitizeEvent(v: unknown): PhraseEvent | null {
     degree: int(prop(v, 'degree'), -128, 128, 0),
     octave: int(prop(v, 'octave'), -2, 10, 4),
   }
+  // Preserve a stable captured-voice id when present (§17); drop it otherwise.
+  const rawId = prop(v, 'id')
+  if (typeof rawId === 'number' && Number.isFinite(rawId)) event.id = Math.trunc(rawId)
   const expr = sanitizeExpression(prop(v, 'expression'))
   if (expr) event.expression = expr
   return event

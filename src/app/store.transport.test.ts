@@ -91,11 +91,24 @@ vi.mock('../transport/linkBridge', () => ({
 // Import AFTER the mocks are registered (vi.mock is hoisted, but keep it explicit).
 import { instrumentStore } from './store'
 
+interface PhraseInput {
+  events: Array<{ time: number; type: 'on' | 'off'; degree: number; octave: number; id?: number }>
+  lengthBeats: number
+}
 interface StorePrivates {
   engine: FakeEngine
-  ctxNow(): number
+  ctxNow: () => number
   onPhraseEvents(events: Array<{ time: number; offTime: number; note: number; velocity: number; beat: number }>): void
   noteOnAt(indexInScale: number, octave: number, expr: TouchExpression): number
+  buildPhrasePattern(phrase: PhraseInput): {
+    pattern: Array<{ beat: number; durationBeats: number; note: number; velocity: number }>
+    loopBeats: number
+  }
+  recordBeatAt(t: number): number
+  recordedEvents: Array<{ time: number; type: string; id?: number }>
+  recordAnchorCtx: number
+  recordAnchorBeat: number
+  recordBpm: number
   phraseTable: Array<{ degree: number; octave: number; expr: TouchExpression }>
   phrasePending: Set<unknown>
   phraseVoiceIds: Set<number>
@@ -188,6 +201,93 @@ describe('§6 phrase lookahead cancellation', () => {
     vi.advanceTimersByTime(1000)
     // No stray playback voice bled into the take.
     expect(priv.phraseVoiceIds.size).toBe(0)
+  })
+})
+
+describe('§17 phrase-event identity (overlapping same cell)', () => {
+  it('pairs on/off by stable id so overlapping identical cells keep their own durations', () => {
+    // Two plays of the SAME cell (degree 0, octave 4) overlap. Their offs arrive
+    // in the opposite order; only id-pairing recovers the true durations.
+    const phrase: PhraseInput = {
+      lengthBeats: 4,
+      events: [
+        { time: 0, type: 'on', degree: 0, octave: 4, id: 1 },
+        { time: 1, type: 'on', degree: 0, octave: 4, id: 2 },
+        { time: 2, type: 'off', degree: 0, octave: 4, id: 2 },
+        { time: 3, type: 'off', degree: 0, octave: 4, id: 1 },
+      ],
+    }
+    const { pattern } = priv.buildPhrasePattern(phrase)
+    const first = pattern.find((p) => p.beat === 0)!
+    const second = pattern.find((p) => p.beat === 1)!
+    expect(first.durationBeats).toBeCloseTo(3, 5) // id 1: 0 → 3
+    expect(second.durationBeats).toBeCloseTo(1, 5) // id 2: 1 → 2
+  })
+
+  it('falls back to degree/octave pairing for legacy id-less phrases', () => {
+    const phrase: PhraseInput = {
+      lengthBeats: 4,
+      events: [
+        { time: 0, type: 'on', degree: 2, octave: 4 },
+        { time: 2, type: 'off', degree: 2, octave: 4 },
+      ],
+    }
+    const { pattern } = priv.buildPhrasePattern(phrase)
+    expect(pattern[0].durationBeats).toBeCloseTo(2, 5)
+  })
+
+  it('a missing note-off leaves the note at the default duration (no stolen off)', () => {
+    const phrase: PhraseInput = {
+      lengthBeats: 4,
+      events: [
+        { time: 0, type: 'on', degree: 0, octave: 4, id: 1 },
+        { time: 1, type: 'on', degree: 0, octave: 4, id: 2 },
+        { time: 2, type: 'off', degree: 0, octave: 4, id: 2 }, // only id 2 released
+      ],
+    }
+    const { pattern } = priv.buildPhrasePattern(phrase)
+    const first = pattern.find((p) => p.beat === 0)!
+    expect(first.durationBeats).toBeCloseTo(0.5, 5) // default, not id 2's off
+  })
+})
+
+describe('§18 tempo-stable capture timeline', () => {
+  it('integrates beats piecewise across a tempo change', () => {
+    // Anchor at 120 BPM (0.5 s/beat) from t=0.
+    priv.recordAnchorCtx = 0
+    priv.recordAnchorBeat = 0
+    priv.recordBpm = 120
+    expect(priv.recordBeatAt(2)).toBeCloseTo(4, 5) // 2 s ÷ 0.5 = 4 beats
+
+    // At t=2 the tempo halves to 60 BPM (1 s/beat); re-anchor there.
+    priv.recordAnchorBeat = priv.recordBeatAt(2)
+    priv.recordAnchorCtx = 2
+    priv.recordBpm = 60
+    // A further 2 s adds only 2 beats → 6 total, NOT rescaled back to 4.
+    expect(priv.recordBeatAt(4)).toBeCloseTo(6, 5)
+  })
+
+  it('captures event beats piecewise when BPM changes mid-take', () => {
+    instrumentStore.panic()
+    priv.recorderState = 'idle' // hermetic: the singleton is shared across cases
+    priv.startedFlag = true // skip async ensureStarted so the clock stays controlled
+    priv.startPromise = Promise.resolve()
+    let clock = 0
+    priv.ctxNow = () => clock
+    instrumentStore.setBpm(120)
+
+    instrumentStore.toggleRecordPhrase() // arm at t=0, 120 BPM
+    expect(priv.recorderState).toBe('recording')
+
+    clock = 2
+    priv.noteOnAt(0, 4, EXPR) // captured at beat 4
+    instrumentStore.setBpm(60) // tempo change re-anchors the timeline
+    clock = 4
+    priv.noteOnAt(2, 4, EXPR) // captured at beat 6 (not 4)
+
+    const ons = priv.recordedEvents.filter((e) => e.type === 'on')
+    expect(ons[0].time).toBeCloseTo(4, 5)
+    expect(ons[1].time).toBeCloseTo(6, 5)
   })
 })
 

@@ -37,6 +37,22 @@ describe('stored BPM (§10)', () => {
   })
 })
 
+describe('phrase-event identity (§17)', () => {
+  it('preserves a finite integer id and drops a malformed one', () => {
+    const s = sanitizeSession({
+      phrase: {
+        lengthBeats: 4,
+        events: [
+          { time: 0, type: 'on', degree: 0, octave: 4, id: 7 },
+          { time: 1, type: 'off', degree: 0, octave: 4, id: 'nope' },
+        ],
+      },
+    })
+    expect(s.phrase?.events[0].id).toBe(7)
+    expect(s.phrase?.events[1].id).toBeUndefined()
+  })
+})
+
 describe('deprecated unison chord mode (§7)', () => {
   it('migrates a stored unison chord mode to off', () => {
     expect(sanitizeSession({ chordMode: 'unison' }).chordMode).toBe('off')

@@ -196,8 +196,14 @@ class InstrumentStore {
   private latchOn = false
 
   private recorderState: RecorderState = 'idle'
-  private recordStartCtx = 0
   private recordedEvents: PhraseEvent[] = []
+  // Piecewise musical timeline for capture (§18): beats are integrated at the
+  // tempo in force at each moment, so a tempo change never retroactively
+  // rescales earlier-captured event positions. `recordBeatAt` advances the
+  // anchor whenever tempo changes mid-take.
+  private recordAnchorCtx = 0
+  private recordAnchorBeat = 0
+  private recordBpm = 120
 
   private masterRecordingFlag = false
 
@@ -620,9 +626,24 @@ class InstrumentStore {
 
   private applyTempo(): void {
     const eb = this.computeEffectiveBpm()
+    // Re-anchor the capture timeline BEFORE adopting the new tempo (§18): the
+    // beats elapsed so far are locked in at the old tempo, and only future
+    // capture integrates at the new one. This keeps a mid-take tempo change (or
+    // a Link connect/disconnect) from corrupting already-captured positions.
+    if (this.recorderState === 'recording') {
+      const now = this.ctxNow()
+      this.recordAnchorBeat = this.recordBeatAt(now)
+      this.recordAnchorCtx = now
+      this.recordBpm = eb > 0 ? eb : this.recordBpm
+    }
     this.engine.setTempo(eb)
     this.arpScheduler.setTempo(eb)
     this.phraseScheduler.setTempo(eb)
+  }
+
+  /** Beats elapsed at ctx time `t` on the piecewise capture timeline (§18). */
+  private recordBeatAt(t: number): number {
+    return this.recordAnchorBeat + (t - this.recordAnchorCtx) / secondsPerBeat(this.recordBpm)
   }
 
   setBpm = (bpm: number): void => {
@@ -800,7 +821,7 @@ class InstrumentStore {
     }
 
     if (this.recorderState === 'recording') {
-      this.captureEvent('on', indexInScale, octave, expr)
+      this.captureEvent('on', indexInScale, octave, expr, id)
     }
     this.emit()
     return id
@@ -846,7 +867,7 @@ class InstrumentStore {
       this.voices.delete(voiceId)
     }
     if (this.recorderState === 'recording') {
-      this.captureEvent('off', v.indexInScale, v.octave, v.expr)
+      this.captureEvent('off', v.indexInScale, v.octave, v.expr, voiceId)
     }
   }
 
@@ -1028,16 +1049,20 @@ class InstrumentStore {
     degree: number,
     octave: number,
     expr: TouchExpression,
+    id: number,
   ): void {
     // Cap live captures so an unattended recording can't grow unbounded; the
     // same ceiling the import path enforces in sanitizePhrase.
     if (this.recordedEvents.length >= MAX_PHRASE_EVENTS) return
-    const beat = (this.ctxNow() - this.recordStartCtx) / secondsPerBeat(this.computeEffectiveBpm())
+    // Piecewise musical time (§18): integrates tempo changes rather than
+    // dividing total elapsed seconds by the latest BPM.
+    const beat = this.recordBeatAt(this.ctxNow())
     this.recordedEvents.push({
       time: Math.max(0, beat),
       type,
       degree,
       octave,
+      id, // stable captured-voice id so on/off pair deterministically (§17)
       expression: { ...expr },
     })
   }
@@ -1065,7 +1090,10 @@ class InstrumentStore {
     }
     void this.ensureStarted()
     this.recordedEvents = []
-    this.recordStartCtx = this.ctxNow()
+    // Anchor the musical timeline at record start (§18).
+    this.recordAnchorCtx = this.ctxNow()
+    this.recordAnchorBeat = 0
+    this.recordBpm = this.computeEffectiveBpm() || 120
     this.recorderState = 'recording'
     this.emit()
   }
@@ -1108,17 +1136,20 @@ class InstrumentStore {
 
     phrase.events.forEach((on) => {
       if (on.type !== 'on') return
-      // Match the earliest later off for the same cell that isn't already claimed.
+      // Pair with the matching note-off. When the on carries a stable captured
+      // id (§17) match by id exactly — so overlapping plays of the SAME cell
+      // pair to their own off, and a missing note-off leaves the note at the
+      // default duration instead of stealing another's off. Older phrases with
+      // no ids fall back to the earliest later same-cell off (legacy behaviour).
+      const useId = on.id !== undefined
       let offBeat: number | null = null
       for (let j = 0; j < phrase.events.length; j++) {
         const off = phrase.events[j]
-        if (
-          off.type === 'off' &&
-          !usedOff.has(j) &&
-          off.degree === on.degree &&
-          off.octave === on.octave &&
-          off.time >= on.time
-        ) {
+        if (off.type !== 'off' || usedOff.has(j) || off.time < on.time) continue
+        const match = useId
+          ? off.id === on.id
+          : off.degree === on.degree && off.octave === on.octave
+        if (match) {
           usedOff.add(j)
           offBeat = off.time
           break

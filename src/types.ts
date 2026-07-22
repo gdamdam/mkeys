@@ -206,6 +206,13 @@ export interface PhraseEvent {
   type: 'on' | 'off'
   degree: number
   octave: number
+  /**
+   * Stable captured-voice id (§17): a note-off carries the same `id` as its
+   * note-on, so overlapping plays of the same cell pair deterministically
+   * instead of by degree/octave heuristics. Optional for backward compatibility
+   * — phrases recorded before this fall back to degree/octave pairing.
+   */
+  id?: number
   expression?: TouchExpression
 }
 

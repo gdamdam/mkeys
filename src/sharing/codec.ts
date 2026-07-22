@@ -107,8 +107,9 @@ type CompactArp = [number, number, number, number, number, number]
 type CompactMidi = [number, number, number, number?]
 /** [pitch, glide, timbre, pressure] */
 type CompactExpr = [number, number, number, number]
-/** [time, typeIdx, degree, octave, expr|null] */
-type CompactEvent = [number, number, number, number, CompactExpr | null]
+/** [time, typeIdx, degree, octave, expr|null, id?]. `id` (§17) appended in 0.6;
+ *  older 5-element events decode with no id (legacy degree/octave pairing). */
+type CompactEvent = [number, number, number, number, CompactExpr | null, number?]
 /** [lengthBeats, events] */
 type CompactPhrase = [number, CompactEvent[]]
 /** [tonicHz, period, name, scaleCents[]] */
@@ -434,6 +435,7 @@ function sanitizeEvent(raw: unknown): PhraseEvent | null {
     degree: int(raw.degree, -128, 128, 0),
     octave: int(raw.octave, -2, 10, 4),
   }
+  if (typeof raw.id === 'number' && Number.isFinite(raw.id)) event.id = Math.trunc(raw.id) // §17
   const expr = sanitizeExpression(raw.expression)
   if (expr) event.expression = expr
   return event
@@ -542,7 +544,10 @@ function encodeEvent(e: PhraseEvent): CompactEvent {
   const expr: CompactExpr | null = e.expression
     ? [e.expression.pitch, e.expression.glide, e.expression.timbre, e.expression.pressure]
     : null
-  return [e.time, EVENT_TYPES.indexOf(e.type), e.degree, e.octave, expr]
+  // Append the id only when present, so id-less phrases stay 5-element.
+  return e.id !== undefined
+    ? [e.time, EVENT_TYPES.indexOf(e.type), e.degree, e.octave, expr, e.id]
+    : [e.time, EVENT_TYPES.indexOf(e.type), e.degree, e.octave, expr]
 }
 
 function encodePhrase(p: Phrase | null): CompactPhrase | null {
@@ -656,13 +661,14 @@ function decodeFx(raw: unknown): Record<string, unknown> {
 
 function decodeEvent(raw: unknown): Record<string, unknown> {
   if (!Array.isArray(raw)) return {}
-  const [time, typeIdx, degree, octave, expr] = raw as unknown[]
+  const [time, typeIdx, degree, octave, expr, id] = raw as unknown[]
   const event: Record<string, unknown> = {
     time: nn(time),
     type: fromIdx(EVENT_TYPES, typeIdx),
     degree: nn(degree),
     octave: nn(octave),
   }
+  if (typeof id === 'number') event.id = id // stable captured-voice id (§17)
   if (Array.isArray(expr)) {
     const [pitch, glide, timbre, pressure] = expr as unknown[]
     event.expression = { pitch: nn(pitch), glide: nn(glide), timbre: nn(timbre), pressure: nn(pressure) }

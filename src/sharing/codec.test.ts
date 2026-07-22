@@ -31,6 +31,33 @@ function makeSession(overrides: Partial<Session> = {}): Session {
   return sanitizeSession({ ...base, ...overrides })
 }
 
+describe('phrase-event identity in share links (§17)', () => {
+  it('round-trips stable captured-voice ids', () => {
+    const s = makeSession({
+      phrase: {
+        lengthBeats: 4,
+        events: [
+          { time: 0, type: 'on', degree: 0, octave: 4, id: 3 },
+          { time: 2, type: 'off', degree: 0, octave: 4, id: 3 },
+        ],
+      },
+    })
+    const back = decodeSession(encodeSession(s))
+    expect(back?.phrase?.events[0].id).toBe(3)
+    expect(back?.phrase?.events[1].id).toBe(3)
+  })
+
+  it('decodes a legacy 5-element event (no id) without crashing', () => {
+    const s = makeSession({
+      phrase: { lengthBeats: 4, events: [{ time: 0, type: 'on', degree: 0, octave: 4 }] },
+    })
+    const compact = JSON.parse(decodeWire(encodeSession(s))) as Record<string, unknown>
+    // ph = [lengthBeats, events]; each event is a 5-tuple with no trailing id.
+    const back = decodeSession(b64(compact))
+    expect(back?.phrase?.events[0].id).toBeUndefined()
+  })
+})
+
 describe('deprecated unison chord mode in share links (§7)', () => {
   it('decodes a legacy unison (compact index 1) to off', () => {
     // Hand-craft a compact payload that still encodes chordMode index 1 (unison).
