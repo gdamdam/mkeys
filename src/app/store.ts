@@ -25,6 +25,7 @@ import { MAX_BPM, MIN_BPM } from '../types'
 import {
   MAX_KBM_BYTES,
   MAX_KEYBOARD_MAP_DEGREES,
+  MAX_RECORDING_SECONDS,
   MAX_SCL_BYTES,
   MAX_TUNING_NOTES,
   byteLength,
@@ -206,6 +207,8 @@ class InstrumentStore {
   private recordBpm = 120
 
   private masterRecordingFlag = false
+  private masterRecordSeconds = 0
+  private masterRecordTimer: ReturnType<typeof setInterval> | null = null
 
   private midiReadyFlag = false
   private midiAccess: MIDIAccess | null = null
@@ -358,6 +361,8 @@ class InstrumentStore {
       deleteSession: this.deleteSession,
       applySession: this.applySession,
       masterRecording: this.masterRecordingFlag,
+      masterRecordSeconds: this.masterRecordSeconds,
+      masterRecordMaxSeconds: MAX_RECORDING_SECONDS,
       startMasterRecord: this.startMasterRecord,
       stopMasterRecord: this.stopMasterRecord,
       midiReady: this.midiReadyFlag,
@@ -1315,21 +1320,45 @@ class InstrumentStore {
     const rec = this.engine.getRecorder()
     if (!rec) return
     await rec.start()
+    // Auto-stop + finalise when the memory ceiling is reached (§9).
+    rec.onLimitReached = () => {
+      void this.stopMasterRecord()
+    }
     this.masterRecordingFlag = true
+    this.masterRecordSeconds = 0
+    // A display-only ticker for the elapsed/remaining readout — off the audio
+    // path, never drives a note. Reads the recorder's frame count (§9).
+    if (this.masterRecordTimer) clearInterval(this.masterRecordTimer)
+    this.masterRecordTimer = setInterval(() => {
+      this.masterRecordSeconds = rec.elapsedSeconds()
+      this.emit()
+    }, 250)
     this.emit()
   }
 
   stopMasterRecord = async (): Promise<void> => {
+    if (this.masterRecordTimer) {
+      clearInterval(this.masterRecordTimer)
+      this.masterRecordTimer = null
+    }
     const rec = this.engine.getRecorder()
     if (!rec) {
       this.masterRecordingFlag = false
+      this.masterRecordSeconds = 0
       this.emit()
       return
     }
+    // Detaching onLimitReached first prevents a late auto-stop from re-entering.
+    rec.onLimitReached = null
     const blob = await rec.stop()
     this.masterRecordingFlag = false
+    this.masterRecordSeconds = 0
     this.emit()
-    this.downloadBlob(blob, `mkeys-${Date.now()}.wav`)
+    // A 44-byte blob is a header-only (empty) WAV — never download it (§9): a
+    // failed/no-audio take must not masquerade as a real recording.
+    if (blob.size > 44) {
+      this.downloadBlob(blob, `mkeys-${Date.now()}.wav`)
+    }
   }
 
   private downloadBlob(blob: Blob, filename: string): void {

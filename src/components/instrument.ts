@@ -170,6 +170,10 @@ export interface Instrument {
 
   // --- master audio capture ------------------------------------------------
   masterRecording: boolean
+  /** Seconds captured in the current take (§9). */
+  masterRecordSeconds: number
+  /** Hard capacity ceiling in seconds; capture auto-stops here (§9). */
+  masterRecordMaxSeconds: number
   startMasterRecord: () => void | Promise<void>
   /** Stop and hand off the WAV (the store downloads it). */
   stopMasterRecord: () => void | Promise<void>

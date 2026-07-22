@@ -19,6 +19,12 @@ interface Toast {
   warn: boolean
 }
 
+/** Format seconds as m:ss for the recording readout. */
+function fmtClock(sec: number): string {
+  const s = Math.max(0, Math.floor(sec))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
 export function SessionBar() {
   const inst = useInstrument()
   const { session, savedSessions } = inst
@@ -209,12 +215,14 @@ export function SessionBar() {
             {inst.masterRecording ? <StopIcon /> : <RecordIcon />}
           </IconButton>
           {inst.masterRecording ? (
-            <span className="pill pill--live">
+            <span className="pill pill--live" role="status" aria-live="polite">
               <span className="prec-dot" />
-              Recording…
+              {fmtClock(inst.masterRecordSeconds)} / {fmtClock(inst.masterRecordMaxSeconds)}
             </span>
           ) : (
-            <span className="sessionrow__meta">Capture the live mix as a WAV file.</span>
+            <span className="sessionrow__meta">
+              Capture the live mix as a WAV file (up to {Math.round(inst.masterRecordMaxSeconds / 60)} min).
+            </span>
           )}
         </div>
       </section>

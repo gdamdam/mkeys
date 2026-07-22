@@ -42,6 +42,19 @@ export const MAX_SHARE_FRAGMENT_CHARS = 2 * 1024 * 1024
 export const MAX_DECODED_SHARE_CHARS = 4 * 1024 * 1024
 
 /**
+ * Master WAV capture ceiling, seconds (§9). Master capture holds the whole take
+ * in memory as Float32 chunks, so this bounds peak memory: at 48 kHz stereo,
+ * 5 min ≈ 115 MB of float samples plus the encode buffer. Recording auto-stops
+ * (and finalises) when this is reached.
+ */
+export const MAX_RECORDING_SECONDS = 300
+
+/** Frames the recording limit corresponds to at a given sample rate (§9). */
+export function maxRecordingFrames(sampleRate: number): number {
+  return Math.floor(MAX_RECORDING_SECONDS * sampleRate)
+}
+
+/**
  * UTF-8 byte length of a string, used for the file-size pre-checks. Falls back
  * to the UTF-16 code-unit count when TextEncoder is unavailable (never larger
  * for the ASCII-ish content these files carry, so still a safe conservative

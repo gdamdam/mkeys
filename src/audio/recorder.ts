@@ -21,6 +21,8 @@ interface DoneMsg {
 }
 type RecorderOutMsg = ChunkMsg | DoneMsg
 
+import { maxRecordingFrames } from '../limits'
+
 /** Max wait for the worklet's "done" ack on stop, so stop() never hangs. */
 const DONE_ACK_TIMEOUT_MS = 2000
 
@@ -95,6 +97,12 @@ export class MasterRecorder {
   private active: Capture | null = null
   /** Claimed synchronously in start() so a concurrent start() bails. */
   private capturing = false
+  /** Hard frame ceiling for one take (§9); auto-stop fires when reached. */
+  private readonly maxFrames: number
+  /** Set true once the limit is hit, so the auto-stop callback fires once. */
+  private limitHit = false
+  /** Store-supplied callback invoked once when the recording limit is reached (§9). */
+  onLimitReached: (() => void) | null = null
 
   /**
    * @param ctx     the running AudioContext
@@ -103,11 +111,22 @@ export class MasterRecorder {
   constructor(ctx: AudioContext, tapNode: AudioNode) {
     this.ctx = ctx
     this.tapNode = tapNode
+    this.maxFrames = maxRecordingFrames(ctx.sampleRate)
   }
 
   /** True while a capture is in progress. */
   isRecording(): boolean {
     return this.capturing
+  }
+
+  /** Seconds captured in the active take (0 when idle) — for the UI readout (§9). */
+  elapsedSeconds(): number {
+    return this.active ? this.active.totalFrames / this.ctx.sampleRate : 0
+  }
+
+  /** Whether the active take has reached the hard capacity ceiling (§9). */
+  isLimitReached(): boolean {
+    return this.limitHit
   }
 
   /** Begin capturing. The `mkeys-recorder-tap` module must already be added. */
@@ -116,6 +135,7 @@ export class MasterRecorder {
     // Claim synchronously, before any await, so a double-tapped start can't
     // build a second tap node into the same buffers.
     this.capturing = true
+    this.limitHit = false
     try {
       if (this.ctx.state === 'suspended') await this.ctx.resume()
 
@@ -145,6 +165,12 @@ export class MasterRecorder {
           capture.chunksL.push(l)
           capture.chunksR.push(r)
           capture.totalFrames += l.length
+          // Bound memory (§9): once the ceiling is reached, fire the auto-stop
+          // callback exactly once. Further chunks are ignored below.
+          if (!this.limitHit && capture.totalFrames >= this.maxFrames) {
+            this.limitHit = true
+            this.onLimitReached?.()
+          }
         } else if (msg.type === 'done') {
           resolveDone()
         }
@@ -189,6 +215,11 @@ export class MasterRecorder {
 
     const left = concat(capture.chunksL, capture.totalFrames)
     const right = concat(capture.chunksR, capture.totalFrames)
+    // Release the per-chunk buffers before allocating the WAV, so peak memory is
+    // the two concatenated channels + the encode buffer, not those plus every
+    // chunk still held (§9).
+    capture.chunksL.length = 0
+    capture.chunksR.length = 0
 
     const wav = encodeWav16(left, right, this.ctx.sampleRate)
     return new Blob([wav], { type: 'audio/wav' })
