@@ -12,6 +12,7 @@ import {
   RecordIcon,
   Segmented,
   Select,
+  Slider,
   StopIcon,
   Toggle,
   ValueReadout,
@@ -50,6 +51,7 @@ const pct = (v: number): string => `${Math.round(v * 100)}`
 export function PerformancePanel() {
   const inst = useInstrument()
   const arp = inst.session.arp
+  const surface = inst.session.surface
   const { recorder } = inst
 
   const setArp = (p: Partial<ArpConfig>): void => inst.setArp({ ...arp, ...p })
@@ -134,6 +136,56 @@ export function PerformancePanel() {
           checked={inst.latch}
           onChange={(on) => inst.setLatch(on)}
         />
+      </section>
+
+      {/* Playing surface — glide quantize (advertised 0–100%) + advanced geometry */}
+      <section className="pgroup">
+        <span className="pgroup__title eyebrow">Playing surface</span>
+        <Slider
+          label="Glide quantize"
+          min={0}
+          max={1}
+          step={0.01}
+          value={surface.quantize}
+          unit="%"
+          format={(v) => `${Math.round(v * 100)}`}
+          onChange={(v) => inst.setQuantize(v)}
+        />
+        <p className="pempty" style={{ margin: '2px 0 0' }}>
+          0% glides continuously between degrees · 100% snaps in steps.
+        </p>
+        <details className="padvanced">
+          <summary className="eyebrow">Advanced layout</summary>
+          <div className="pshelf">
+            <Knob
+              label="Rows"
+              min={1}
+              max={12}
+              step={1}
+              value={surface.rows}
+              format={(v) => `${Math.round(v)}`}
+              onChange={(v) => inst.setSurfaceGeometry({ rows: Math.round(v) })}
+            />
+            <Knob
+              label="Columns"
+              min={1}
+              max={24}
+              step={1}
+              value={surface.cols}
+              format={(v) => `${Math.round(v)}`}
+              onChange={(v) => inst.setSurfaceGeometry({ cols: Math.round(v) })}
+            />
+            <Knob
+              label="Row offset"
+              min={0}
+              max={12}
+              step={1}
+              value={surface.rowOffsetDegrees}
+              format={(v) => `${Math.round(v)}`}
+              onChange={(v) => inst.setSurfaceGeometry({ rowOffsetDegrees: Math.round(v) })}
+            />
+          </div>
+        </details>
       </section>
 
       {/* Phrase looper */}

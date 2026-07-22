@@ -233,6 +233,20 @@
   background: var(--ember-wash);
 }
 
+/* Advanced (collapsible) surface controls (§11). */
+.padvanced {
+  margin-top: 4px;
+}
+.padvanced > summary {
+  cursor: pointer;
+  padding: 4px 0;
+  user-select: none;
+}
+.padvanced > summary:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+
 /* Panic / all-notes-off — a clearly-marked safety control (§13). */
 .pbtn--panic {
   border-color: var(--ember-dim);

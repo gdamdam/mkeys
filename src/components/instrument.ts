@@ -119,6 +119,10 @@ export interface Instrument {
   setLayout: (layout: SurfaceConfig['layout']) => void
   /** Shift the surface register: octave of the bottom-left pad (clamped -1..9). */
   setBaseOctave: (octave: number) => void
+  /** Glide quantize 0..1 (§11): 0 = continuous portamento, 1 = stepped snap. Applied live. */
+  setQuantize: (v: number) => void
+  /** Advanced surface geometry: rows / columns / isomorphic row offset (§11). Relays the grid. */
+  setSurfaceGeometry: (next: { rows?: number; cols?: number; rowOffsetDegrees?: number }) => void
 
   // --- tempo (transient — not on Session) ----------------------------------
   bpm: number

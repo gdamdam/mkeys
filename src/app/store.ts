@@ -333,6 +333,8 @@ class InstrumentStore {
       importKbmFile: this.importKbmFile,
       setLayout: this.setLayout,
       setBaseOctave: this.setBaseOctave,
+      setQuantize: this.setQuantize,
+      setSurfaceGeometry: this.setSurfaceGeometry,
       bpm: this.bpm,
       effectiveBpm: this.computeEffectiveBpm(),
       setBpm: this.setBpm,
@@ -559,6 +561,44 @@ class InstrumentStore {
     if (baseOctave === this.session.surface.baseOctave) return
     this.releaseAll()
     this.session = { ...this.session, surface: { ...this.session.surface, baseOctave } }
+    this.rebuildGrid()
+    this.autosave()
+    this.emit()
+  }
+
+  /**
+   * Glide quantize amount, 0..1 (§11). 0 = continuous portamento between
+   * degrees; 1 = strongly stepped/snap-like glide. Applied live — the Surface
+   * reads `surface.quantize` on every pointer move — so it must NOT relay the
+   * grid or release sounding voices.
+   */
+  setQuantize = (v: number): void => {
+    const quantize = clamp01(v)
+    if (quantize === this.session.surface.quantize) return
+    this.session = { ...this.session, surface: { ...this.session.surface, quantize } }
+    this.autosave()
+    this.emit()
+  }
+
+  /**
+   * Advanced surface geometry: rows / columns / isomorphic row offset (§11).
+   * These change the grid layout, so they relay the grid and release sounding
+   * notes (like {@link setLayout}). Bounds mirror the sanitizer.
+   */
+  setSurfaceGeometry = (next: { rows?: number; cols?: number; rowOffsetDegrees?: number }): void => {
+    const s = this.session.surface
+    const surface = {
+      ...s,
+      rows: next.rows !== undefined ? clampInt(next.rows, 1, 32) : s.rows,
+      cols: next.cols !== undefined ? clampInt(next.cols, 1, 32) : s.cols,
+      rowOffsetDegrees:
+        next.rowOffsetDegrees !== undefined ? clampInt(next.rowOffsetDegrees, 0, 12) : s.rowOffsetDegrees,
+    }
+    if (surface.rows === s.rows && surface.cols === s.cols && surface.rowOffsetDegrees === s.rowOffsetDegrees) {
+      return
+    }
+    this.releaseAll()
+    this.session = { ...this.session, surface }
     this.rebuildGrid()
     this.autosave()
     this.emit()

@@ -204,6 +204,45 @@ describe('§6 phrase lookahead cancellation', () => {
   })
 })
 
+describe('§11 glide-quantize + surface geometry', () => {
+  beforeEach(() => {
+    instrumentStore.panic()
+    priv.startedFlag = true
+    priv.startPromise = Promise.resolve()
+  })
+
+  it('setQuantize clamps to 0..1 and applies to the session', () => {
+    instrumentStore.setQuantize(0.5)
+    expect(instrumentStore.getSnapshot().session.surface.quantize).toBe(0.5)
+    instrumentStore.setQuantize(2)
+    expect(instrumentStore.getSnapshot().session.surface.quantize).toBe(1)
+    instrumentStore.setQuantize(-1)
+    expect(instrumentStore.getSnapshot().session.surface.quantize).toBe(0)
+  })
+
+  it('setQuantize applies live without releasing sounding voices', () => {
+    priv.noteOnAt(0, 4, EXPR)
+    const before = priv.voices.size
+    instrumentStore.setQuantize(0.7)
+    expect(priv.voices.size).toBe(before) // unrelated voices untouched
+  })
+
+  it('setSurfaceGeometry relays the grid and clamps bounds', () => {
+    instrumentStore.setSurfaceGeometry({ rows: 8 })
+    expect(instrumentStore.getSnapshot().session.surface.rows).toBe(8)
+    expect(instrumentStore.getSnapshot().grid.length).toBe(8)
+    instrumentStore.setSurfaceGeometry({ rows: 999 })
+    expect(instrumentStore.getSnapshot().session.surface.rows).toBe(32) // clamped
+  })
+
+  it('changing geometry releases sounding voices (grid changed)', () => {
+    priv.noteOnAt(0, 4, EXPR)
+    expect(priv.voices.size).toBeGreaterThan(0)
+    instrumentStore.setSurfaceGeometry({ cols: 10 })
+    expect(priv.voices.size).toBe(0)
+  })
+})
+
 describe('§17 phrase-event identity (overlapping same cell)', () => {
   it('pairs on/off by stable id so overlapping identical cells keep their own durations', () => {
     // Two plays of the SAME cell (degree 0, octave 4) overlap. Their offs arrive
