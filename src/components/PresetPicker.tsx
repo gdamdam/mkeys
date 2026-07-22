@@ -10,10 +10,17 @@ import './panels.css'
 
 const CATEGORY_LABELS: Record<Preset['category'], string> = {
   lead: 'Leads',
+  keys: 'Keys',
+  organ: 'Organ',
+  brass: 'Brass',
+  strings: 'Strings',
   pad: 'Pads',
+  bells: 'Bells',
   pluck: 'Plucks',
   bass: 'Bass',
+  arp: 'Arp / Seq',
   ambient: 'Ambient',
+  fx: 'FX',
 }
 
 export function PresetPicker() {

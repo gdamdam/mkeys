@@ -78,12 +78,12 @@ function checkFx(fx: Partial<FxParams>): void {
 }
 
 describe('PRESETS', () => {
-  it('has 12..16 presets', () => {
-    expect(PRESETS.length).toBeGreaterThanOrEqual(12)
-    expect(PRESETS.length).toBeLessThanOrEqual(16)
+  it('has a full factory bank (50..60 presets)', () => {
+    expect(PRESETS.length).toBeGreaterThanOrEqual(50)
+    expect(PRESETS.length).toBeLessThanOrEqual(60)
   })
 
-  it('covers all five families', () => {
+  it('covers every family, and every family has at least one preset', () => {
     const seen = new Set(PRESETS.map((p) => p.category))
     for (const c of PRESET_CATEGORIES) expect(seen.has(c)).toBe(true)
     expect(seen.size).toBe(PRESET_CATEGORIES.length)
@@ -91,11 +91,18 @@ describe('PRESETS', () => {
 
   it('has the requested family distribution', () => {
     const count = (c: Preset['category']) => PRESETS.filter((p) => p.category === c).length
-    expect(count('lead')).toBe(3)
-    expect(count('pad')).toBe(3)
-    expect(count('pluck')).toBe(2)
-    expect(count('bass')).toBe(2)
-    expect(count('ambient')).toBe(4)
+    expect(count('lead')).toBe(6)
+    expect(count('keys')).toBe(6)
+    expect(count('organ')).toBe(3)
+    expect(count('brass')).toBe(3)
+    expect(count('strings')).toBe(4)
+    expect(count('pad')).toBe(6)
+    expect(count('bells')).toBe(4)
+    expect(count('pluck')).toBe(5)
+    expect(count('bass')).toBe(6)
+    expect(count('arp')).toBe(5)
+    expect(count('ambient')).toBe(5)
+    expect(count('fx')).toBe(4)
   })
 
   it('has unique, non-empty names', () => {
