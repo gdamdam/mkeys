@@ -19,6 +19,7 @@
 import type {
   ArpConfig,
   ChordMode,
+  FxParams,
   Macros,
   MidiConfig,
   Mode,
@@ -144,6 +145,8 @@ export interface Instrument {
   // --- sound ---------------------------------------------------------------
   /** Replace the whole patch (panels build the next patch immutably). */
   updatePatch: (patch: PatchParams) => void
+  /** Replace the whole master-FX state (panels build the next fx immutably). */
+  updateFx: (fx: FxParams) => void
   setMacro: (name: keyof Macros, value: number) => void
   /** Master output level (0..1). */
   setMasterVolume: (v: number) => void

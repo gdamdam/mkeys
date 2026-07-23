@@ -33,6 +33,7 @@ import {
 import type {
   ArpConfig,
   ChordMode,
+  FxParams,
   Macros,
   MidiConfig,
   Mode,
@@ -372,6 +373,7 @@ class InstrumentStore {
       setBpm: this.setBpm,
       tapTempo: this.tapTempo,
       updatePatch: this.updatePatch,
+      updateFx: this.updateFx,
       setMacro: this.setMacro,
       setMasterVolume: this.setMasterVolume,
       setInputGain: this.setInputGain,
@@ -778,6 +780,16 @@ class InstrumentStore {
     this.engine.setPatch(patch)
     // Re-apply macros so a manual patch edit doesn't drop macro overrides.
     this.engine.setMacros(this.session.macros)
+    this.autosave()
+    this.emit()
+  }
+
+  updateFx = (fx: FxParams): void => {
+    // Editing any FX field diverges from the loaded preset, so drop the preset
+    // name (mirrors updatePatch). engine.setFx composes the active macros on top,
+    // so a manual FX edit and a macro move both stay audible.
+    this.session = { ...this.session, fx, presetName: undefined }
+    this.engine.setFx(fx)
     this.autosave()
     this.emit()
   }

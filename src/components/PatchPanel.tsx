@@ -9,6 +9,7 @@ import type { SegmentedOption, SelectOption } from './ui'
 import { useInstrument } from '../app/useInstrument'
 import { EnvelopeGraph, FilterCurve, WaveformIcon } from './synthviz'
 import type {
+  FxParams,
   GlideParams,
   LfoParams,
   OscillatorParams,
@@ -48,12 +49,16 @@ const pct = (v: number): string => `${Math.round(v * 100)}`
 const cents = (v: number): string => `${Math.round(v)}`
 const secs = (v: number): string => `${v.toFixed(2)}`
 const hz = (v: number): string => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${Math.round(v)}`)
+const db = (v: number): string => `${v.toFixed(1)}`
 
 export function PatchPanel() {
   const inst = useInstrument()
   const patch = inst.session.patch
 
   const set = (partial: Partial<PatchParams>): void => inst.updatePatch({ ...patch, ...partial })
+
+  const fx = inst.session.fx
+  const fxSet = (partial: Partial<FxParams>): void => inst.updateFx({ ...fx, ...partial })
 
   const renderOsc = (
     label: string,
@@ -345,6 +350,70 @@ export function PatchPanel() {
             value={patch.volume}
             format={pct}
             onChange={(volume) => set({ volume })}
+          />
+        </div>
+      </section>
+
+      {/* Master FX — the post-voice chain (fx.ts): drive → chorus → delay →
+          reverb → limiter. Stored in session.fx and swapped by presets; these
+          controls edit the base, with the four Macros layered on top. */}
+      <section className="pgroup">
+        <span className="pgroup__title eyebrow">Master FX</span>
+        <div className="pshelf">
+          <Knob
+            label="Drive"
+            hint="Master saturation — soft-clip warmth and harmonic bite across the whole mix."
+            unit="%"
+            min={0}
+            max={1}
+            value={fx.drive}
+            format={pct}
+            onChange={(drive) => fxSet({ drive })}
+          />
+          <Knob
+            label="Chorus"
+            hint="Modulated-delay thickening — width and shimmer."
+            unit="%"
+            min={0}
+            max={1}
+            value={fx.chorus}
+            format={pct}
+            onChange={(chorus) => fxSet({ chorus })}
+          />
+          <div className="psub">
+            <span className="psub__label eyebrow">Delay</span>
+            <div className="pshelf">
+              <Knob label="Mix" hint="Delay wet level — how loud the echoes are." unit="%" min={0} max={1} value={fx.delay.mix} format={pct} onChange={(mix) => fxSet({ delay: { ...fx.delay, mix } })} />
+              <Knob label="Fbk" hint="Feedback — how many times each echo repeats (capped below self-oscillation)." unit="%" min={0} max={0.95} value={fx.delay.feedback} format={pct} onChange={(feedback) => fxSet({ delay: { ...fx.delay, feedback } })} />
+              <Knob label="Time" hint="Delay time in seconds. Disabled when tempo-synced." unit="s" min={0.01} max={2} step={0.01} value={fx.delay.time} format={secs} disabled={fx.delay.tempoSync} onChange={(time) => fxSet({ delay: { ...fx.delay, time } })} />
+              <Toggle label="Tempo sync" hint="lock delay time to tempo" checked={fx.delay.tempoSync} onChange={(tempoSync) => fxSet({ delay: { ...fx.delay, tempoSync } })} />
+              <Select
+                label="Division"
+                title="Tempo-synced delay time, as a note division of the beat."
+                options={DIVISIONS}
+                value={String(fx.delay.division ?? 8)}
+                disabled={!fx.delay.tempoSync}
+                onChange={(v) => fxSet({ delay: { ...fx.delay, division: Number(v) } })}
+              />
+            </div>
+          </div>
+          <div className="psub">
+            <span className="psub__label eyebrow">Reverb</span>
+            <div className="pshelf">
+              <Knob label="Size" hint="Reverb tail length and space — small room to long hall." unit="%" min={0} max={1} value={fx.reverb.size} format={pct} onChange={(size) => fxSet({ reverb: { ...fx.reverb, size } })} />
+              <Knob label="Mix" hint="Reverb wet level — how much space is blended in." unit="%" min={0} max={1} value={fx.reverb.mix} format={pct} onChange={(mix) => fxSet({ reverb: { ...fx.reverb, mix } })} />
+            </div>
+          </div>
+          <Knob
+            label="Limiter"
+            hint="Master limiter threshold (dB) — lower catches peaks harder for a louder, safer output."
+            unit="dB"
+            min={-24}
+            max={0}
+            step={0.5}
+            value={fx.limiterThreshold}
+            format={db}
+            onChange={(limiterThreshold) => fxSet({ limiterThreshold })}
           />
         </div>
       </section>

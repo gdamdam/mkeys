@@ -315,3 +315,20 @@ describe('MIDI-out MPE (microtonal)', () => {
     expect(sent.some(isBend)).toBe(false)
   })
 })
+
+describe('updateFx — master FX controls', () => {
+  it('replaces the whole fx state and detaches from the active preset', () => {
+    const inst = instrumentStore.getSnapshot()
+    inst.loadPreset('Solar Filament')
+    expect(instrumentStore.getSnapshot().session.presetName).toBe('Solar Filament')
+
+    const fx = instrumentStore.getSnapshot().session.fx
+    inst.updateFx({ ...fx, drive: 0.42, delay: { ...fx.delay, mix: 0.1 } })
+
+    const next = instrumentStore.getSnapshot().session
+    expect(next.fx.drive).toBe(0.42)
+    expect(next.fx.delay.mix).toBe(0.1)
+    // Editing FX diverges from the named preset, mirroring updatePatch.
+    expect(next.presetName).toBeUndefined()
+  })
+})
