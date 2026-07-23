@@ -6,6 +6,7 @@
  */
 import {
   CloseIcon,
+  Disclosure,
   IconButton,
   Knob,
   PlayIcon,
@@ -85,15 +86,13 @@ export function PerformancePanel() {
   return (
     <div className="pgroup-wrap">
       {/* Arpeggiator */}
-      <section className="pgroup">
-        <div className="transport__row" style={{ justifyContent: 'space-between' }}>
-          <span className="pgroup__title eyebrow">Arpeggiator</span>
-          <Toggle
-            aria-label="Enable arpeggiator"
-            checked={arp.enabled}
-            onChange={(enabled) => setArp({ enabled })}
-          />
-        </div>
+      <Disclosure id="play.arp" title="Arpeggiator">
+        <Toggle
+          label="Arp on"
+          aria-label="Enable arpeggiator"
+          checked={arp.enabled}
+          onChange={(enabled) => setArp({ enabled })}
+        />
         <Segmented
           label="Arp mode"
           options={ARP_MODES}
@@ -140,11 +139,10 @@ export function PerformancePanel() {
             onChange={(octaves) => setArp({ octaves: Math.round(octaves) })}
           />
         </div>
-      </section>
+      </Disclosure>
 
       {/* Chord + latch */}
-      <section className="pgroup">
-        <span className="pgroup__title eyebrow">Chord</span>
+      <Disclosure id="play.chord" title="Chord" defaultOpen>
         <Segmented
           label="Chord mode"
           hideLabel
@@ -158,12 +156,11 @@ export function PerformancePanel() {
           checked={inst.latch}
           onChange={(on) => inst.setLatch(on)}
         />
-      </section>
+      </Disclosure>
 
       {/* Play quantize (§24) — TIMING of notes on the musical grid. Distinct from
           the Glide quantize below, which shapes PITCH movement between degrees. */}
-      <section className="pgroup">
-        <span className="pgroup__title eyebrow">Play quantize</span>
+      <Disclosure id="play.quantize" title="Play quantize">
         <Segmented
           label="Timing"
           options={TIMING_MODES}
@@ -183,11 +180,10 @@ export function PerformancePanel() {
         <p className="pempty" style={{ margin: '2px 0 0' }}>
           {TIMING_HELP[pq.mode]}
         </p>
-      </section>
+      </Disclosure>
 
       {/* Playing surface — glide quantize (advertised 0–100%) + advanced geometry */}
-      <section className="pgroup">
-        <span className="pgroup__title eyebrow">Playing surface</span>
+      <Disclosure id="play.surface" title="Playing surface">
         <Slider
           label="Glide quantize"
           min={0}
@@ -233,20 +229,17 @@ export function PerformancePanel() {
             />
           </div>
         </details>
-      </section>
+      </Disclosure>
 
       {/* Phrase looper */}
-      <section className="pgroup">
-        <div className="transport__row" style={{ justifyContent: 'space-between' }}>
-          <span className="pgroup__title eyebrow">Phrase looper</span>
-          <ValueReadout
-            label="Length"
-            value={hasPhrase ? recorder.bars : '—'}
-            unit={hasPhrase ? 'bars' : undefined}
-            tone={recording ? 'ember' : 'default'}
-            size="sm"
-          />
-        </div>
+      <Disclosure id="play.looper" title="Phrase looper">
+        <ValueReadout
+          label="Length"
+          value={hasPhrase ? recorder.bars : '—'}
+          unit={hasPhrase ? 'bars' : undefined}
+          tone={recording ? 'ember' : 'default'}
+          size="sm"
+        />
         <div className="transport__row">
           <IconButton
             label={recording ? 'Stop recording' : 'Record phrase'}
@@ -274,7 +267,7 @@ export function PerformancePanel() {
         {!hasPhrase && !recording ? (
           <p className="pempty">No phrase yet. Hit record, play a line, then loop it.</p>
         ) : null}
-      </section>
+      </Disclosure>
     </div>
   )
 }

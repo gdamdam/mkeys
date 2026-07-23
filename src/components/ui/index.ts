@@ -13,6 +13,9 @@ export type { ValueReadoutProps } from './ValueReadout'
 export { Panel } from './Panel'
 export type { PanelProps } from './Panel'
 
+export { Disclosure } from './Disclosure'
+export type { DisclosureProps } from './Disclosure'
+
 export { IconButton } from './IconButton'
 export type { IconButtonProps } from './IconButton'
 

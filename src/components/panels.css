@@ -47,6 +47,60 @@
   color: var(--haze);
 }
 
+/* --- disclosure (collapsible section card) -------------------------------- */
+.disclosure {
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--slate);
+  overflow: hidden;
+  /* Sit as its own card; the grid gap handles spacing between siblings, so the
+     .pgroup + .pgroup hairline must not apply here. */
+  align-self: start;
+}
+.disclosure__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  min-height: var(--touch);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.disclosure__summary::-webkit-details-marker {
+  display: none;
+}
+.disclosure__summary:hover .pgroup__title {
+  color: var(--bone);
+}
+.disclosure[open] > .disclosure__summary {
+  border-bottom: var(--line-w) solid var(--line);
+}
+.disclosure__summary:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: -2px;
+}
+/* Chevron: a right-pointing triangle that rotates down when the card is open. */
+.disclosure__chevron {
+  flex: none;
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 6px solid var(--haze);
+  transition: transform var(--t-fast, 0.12s) ease;
+}
+.disclosure[open] .disclosure__chevron {
+  transform: rotate(90deg);
+}
+.disclosure__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+}
+
 /* --- transport ------------------------------------------------------------ */
 .transport {
   display: flex;

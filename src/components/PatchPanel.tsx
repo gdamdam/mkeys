@@ -4,7 +4,7 @@
  * Every control builds the next PatchParams immutably from `session.patch` and
  * hands the whole patch to `updatePatch` (the store diffs + pushes to the engine).
  */
-import { Knob, Segmented, Select, Toggle } from './ui'
+import { Disclosure, Knob, Segmented, Select, Toggle } from './ui'
 import type { SegmentedOption, SelectOption } from './ui'
 import { useInstrument } from '../app/useInstrument'
 import { EnvelopeGraph, FilterCurve, WaveformIcon } from './synthviz'
@@ -133,8 +133,7 @@ export function PatchPanel() {
   return (
     <div className="pgroup-wrap">
       {/* Oscillators */}
-      <section className="pgroup">
-        <span className="pgroup__title eyebrow">Oscillators</span>
+      <Disclosure id="tone.osc" title="Oscillators" defaultOpen>
         {renderOsc('Osc 1', patch.osc1, (osc1) => set({ osc1 }))}
         {renderOsc('Osc 2', patch.osc2, (osc2) => set({ osc2 }))}
         <div className="pshelf">
@@ -159,11 +158,10 @@ export function PatchPanel() {
             onChange={(noiseLevel) => set({ noiseLevel })}
           />
         </div>
-      </section>
+      </Disclosure>
 
       {/* Filter */}
-      <section className="pgroup">
-        <span className="pgroup__title eyebrow">Filter</span>
+      <Disclosure id="tone.filter" title="Filter" defaultOpen>
         {/* Response curve: cutoff slides the knee, resonance raises the peak. */}
         <FilterCurve
           cutoff={patch.filter.cutoff}
@@ -222,11 +220,10 @@ export function PatchPanel() {
             onChange={(keytrack) => set({ filter: { ...patch.filter, keytrack } })}
           />
         </div>
-      </section>
+      </Disclosure>
 
       {/* Envelopes */}
-      <section className="pgroup">
-        <span className="pgroup__title eyebrow">Envelopes</span>
+      <Disclosure id="tone.env" title="Envelopes" defaultOpen>
         <div className="pshelf">
           <div className="psub">
             <span className="psub__label eyebrow">Amp</span>
@@ -261,11 +258,10 @@ export function PatchPanel() {
             </div>
           </div>
         </div>
-      </section>
+      </Disclosure>
 
       {/* LFO */}
-      <section className="pgroup">
-        <span className="pgroup__title eyebrow">LFO</span>
+      <Disclosure id="tone.lfo" title="LFO">
         {/* A sine, cycling faster/slower with Rate — the modulation shape. */}
         <WaveformIcon wave="sine" className="psub__wave" />
         <div className="pshelf">
@@ -313,11 +309,10 @@ export function PatchPanel() {
             onChange={(v) => set({ lfo: { ...patch.lfo, division: Number(v) } })}
           />
         </div>
-      </section>
+      </Disclosure>
 
       {/* Unison + Glide + Volume */}
-      <section className="pgroup">
-        <span className="pgroup__title eyebrow">Voicing</span>
+      <Disclosure id="tone.voicing" title="Voicing">
         <div className="pshelf">
           <div className="psub">
             <span className="psub__label eyebrow">Unison</span>
@@ -352,13 +347,12 @@ export function PatchPanel() {
             onChange={(volume) => set({ volume })}
           />
         </div>
-      </section>
+      </Disclosure>
 
       {/* Master FX — the post-voice chain (fx.ts): drive → chorus → delay →
           reverb → limiter. Stored in session.fx and swapped by presets; these
           controls edit the base, with the four Macros layered on top. */}
-      <section className="pgroup">
-        <span className="pgroup__title eyebrow">Master FX</span>
+      <Disclosure id="tone.fx" title="Master FX">
         <div className="pshelf">
           <Knob
             label="Drive"
@@ -416,7 +410,7 @@ export function PatchPanel() {
             onChange={(limiterThreshold) => fxSet({ limiterThreshold })}
           />
         </div>
-      </section>
+      </Disclosure>
     </div>
   )
 }

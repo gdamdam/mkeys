@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useInstrument } from './app/useInstrument'
 import { useKeyboardPlay } from './app/useKeyboardPlay'
-import { nextTabIndex } from './app/tablist'
 import { Surface } from './components/Surface/Surface'
 import { TransportBar } from './components/TransportBar'
 import { PatchPanel } from './components/PatchPanel'
@@ -10,13 +8,6 @@ import { Macros } from './components/Macros'
 import { PresetPicker } from './components/PresetPicker'
 import { PerformancePanel } from './components/PerformancePanel'
 import './App.css'
-
-type DrawerTab = 'sound' | 'perform'
-
-const TABS: ReadonlyArray<{ id: DrawerTab; label: string }> = [
-  { id: 'sound', label: 'Sound' },
-  { id: 'perform', label: 'Perform' },
-]
 
 export default function App() {
   const instrument = useInstrument()
@@ -48,18 +39,6 @@ export default function App() {
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(true)
-  const [tab, setTab] = useState<DrawerTab>('sound')
-  const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
-
-  // WAI-ARIA tablist keyboard nav (§20): Left/Right/Home/End move selection and
-  // focus together (roving tabindex), so the tabs are fully keyboard-operable.
-  const onTabKeyDown = useCallback((e: ReactKeyboardEvent, index: number) => {
-    const target = nextTabIndex(e.key, index, TABS.length)
-    if (target === null) return
-    e.preventDefault()
-    setTab(TABS[target].id)
-    tabRefs.current[target]?.focus()
-  }, [])
 
   const handleStart = useCallback(async () => {
     setStarting(true)
@@ -136,27 +115,10 @@ export default function App() {
         className={`app__drawer${drawerOpen ? ' is-open' : ''}`}
         aria-hidden={!drawerOpen}
       >
-        <div className="app__tabs" role="tablist" aria-label="Controls">
-          {TABS.map((t, i) => (
-            <button
-              key={t.id}
-              ref={(el) => {
-                tabRefs.current[i] = el
-              }}
-              type="button"
-              role="tab"
-              id={`tab-${t.id}`}
-              aria-selected={tab === t.id}
-              aria-controls={`panel-${t.id}`}
-              // Roving tabindex: only the selected tab is in the tab order (§20).
-              tabIndex={tab === t.id ? 0 : -1}
-              className={`app__tab${tab === t.id ? ' is-active' : ''}`}
-              onClick={() => setTab(t.id)}
-              onKeyDown={(e) => onTabKeyDown(e, i)}
-            >
-              {t.label}
-            </button>
-          ))}
+        {/* Sticky header: the focus-mode toggle only — the panel below is one
+            merged surface (Quick zone + collapsible Advanced), not tabs. */}
+        <div className="drawer__bar">
+          <span className="drawer__eyebrow eyebrow">Controls</span>
           <button
             type="button"
             className="app__drawer-toggle"
@@ -168,32 +130,21 @@ export default function App() {
           </button>
         </div>
 
-        {/* One panel per tab: the inactive ones are `hidden`, so assistive tech
-            and the tab order skip them; only the active panel mounts content (§20). */}
-        {TABS.map((t) => (
-          <div
-            key={t.id}
-            className="app__panels"
-            role="tabpanel"
-            id={`panel-${t.id}`}
-            aria-labelledby={`tab-${t.id}`}
-            hidden={tab !== t.id}
-            tabIndex={0}
-          >
-            {tab === t.id && t.id === 'sound' && (
-              <>
-                <PresetPicker />
-                {/* Synth sections have very uneven heights; a masonry column flow
-                    packs them tightly instead of a staggered grid (see .soundrack). */}
-                <div className="soundrack">
-                  <Macros />
-                  <PatchPanel />
-                </div>
-              </>
-            )}
-            {tab === t.id && t.id === 'perform' && <PerformancePanel />}
+        {/* One merged surface: a full-width Quick zone (pick a sound, shape it
+            with the macros) followed by collapsible Advanced sections, grouped
+            Tone (timbre) then Play (how notes are triggered & laid out). Each
+            section remembers its open/closed state. Kept in one .app__panels
+            grid so the preset library + section tiling styles still apply. */}
+        <div className="app__panels drawer__advanced">
+          <div className="drawer__quick">
+            <PresetPicker />
+            <Macros />
           </div>
-        ))}
+          <h2 className="drawer__group eyebrow">Tone</h2>
+          <PatchPanel />
+          <h2 className="drawer__group eyebrow">Play</h2>
+          <PerformancePanel />
+        </div>
       </aside>
     </div>
   )
