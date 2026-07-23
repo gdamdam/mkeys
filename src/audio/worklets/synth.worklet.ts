@@ -83,8 +83,20 @@ let voiceStartCounter = 0
 
 type EnvStage = 'idle' | 'attack' | 'decay' | 'sustain' | 'release'
 
+/** Level below which a release tail is inaudible and the voice can be freed. */
+const RELEASE_FLOOR = 1e-4
+/**
+ * Release is exponential for a natural tail, but its time constant is scaled so
+ * the *audible* length matches the dial. A pure exponential from unity down to
+ * {@link RELEASE_FLOOR} spans ln(1/RELEASE_FLOOR) time constants, so dividing
+ * `release` by that factor makes a setting of R seconds fade to silence in ~R
+ * seconds — consistent with the linear attack/decay stages. Without this scale
+ * `release` was the raw time constant, so the real tail ran ~9× the dial.
+ */
+const RELEASE_TC_SCALE = Math.log(1 / RELEASE_FLOOR)
+
 /** Linear ADSR. Times in seconds; `process` advances by one sample. */
-class Envelope {
+export class Envelope {
   private stage: EnvStage = 'idle'
   private level = 0
   private attack = 0.01
@@ -149,8 +161,8 @@ class Envelope {
           this.level = 0
           this.stage = 'idle'
         } else {
-          this.level -= (dt * this.level) / this.release + dt * 1e-4
-          if (this.level <= 1e-4) {
+          this.level -= (dt * this.level * RELEASE_TC_SCALE) / this.release + dt * RELEASE_FLOOR
+          if (this.level <= RELEASE_FLOOR) {
             this.level = 0
             this.stage = 'idle'
           }
