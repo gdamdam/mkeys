@@ -6,6 +6,7 @@
  */
 import { Segmented, Select, Slider, Toggle } from './ui'
 import type { SegmentedOption, SelectOption } from './ui'
+import { SessionBar } from './SessionBar'
 import { TuningControls } from './TuningControls'
 import { useInstrument } from '../app/useInstrument'
 import { MODES } from '../types'
@@ -100,6 +101,8 @@ export function TransportBar() {
         </h1>
         {/* Build version, so what's actually running is visible at a glance. */}
         <span className="transport__version">v{__APP_VERSION__}</span>
+        {/* Session library + I/O, as a compact header dropdown (◆ Session). */}
+        <SessionBar />
       </div>
 
       {/* master output level + pre-FX input gain */}

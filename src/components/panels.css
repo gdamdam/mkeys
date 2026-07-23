@@ -90,6 +90,56 @@
   width: auto;
   border-radius: 8px;
 }
+
+/* --- Session dropdown (◆ Session) — the header session library + I/O ------ */
+.session-menu {
+  position: relative;
+  align-self: center;
+}
+.session-menu > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.session-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.session-menu__button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 34px;
+  padding: 0 12px;
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--slate);
+  color: var(--bone);
+  font-family: var(--font-mono);
+  font-size: var(--fs-ui);
+  letter-spacing: 0.04em;
+}
+.session-menu__button:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}
+.session-menu[open] .session-menu__button,
+.session-menu__button:hover {
+  border-color: var(--ember);
+  color: var(--ember);
+}
+.session-menu__sheet {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + var(--sp-2));
+  left: 0;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(72vh, 560px);
+  overflow-y: auto;
+  padding: var(--sp-4);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--radius);
+  background: var(--slate-2);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+}
 .transport__block {
   display: flex;
   flex-direction: column;

@@ -9,15 +9,13 @@ import { PatchPanel } from './components/PatchPanel'
 import { Macros } from './components/Macros'
 import { PresetPicker } from './components/PresetPicker'
 import { PerformancePanel } from './components/PerformancePanel'
-import { SessionBar } from './components/SessionBar'
 import './App.css'
 
-type DrawerTab = 'sound' | 'perform' | 'session'
+type DrawerTab = 'sound' | 'perform'
 
 const TABS: ReadonlyArray<{ id: DrawerTab; label: string }> = [
   { id: 'sound', label: 'Sound' },
   { id: 'perform', label: 'Perform' },
-  { id: 'session', label: 'Session' },
 ]
 
 export default function App() {
@@ -194,7 +192,6 @@ export default function App() {
               </>
             )}
             {tab === t.id && t.id === 'perform' && <PerformancePanel />}
-            {tab === t.id && t.id === 'session' && <SessionBar />}
           </div>
         ))}
       </aside>

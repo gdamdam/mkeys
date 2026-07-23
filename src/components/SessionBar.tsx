@@ -1,10 +1,11 @@
 /*
- * SessionBar — the session library + I/O. Save / load / delete local sessions,
- * export & import the session JSON, copy a shareable link, and capture the live
- * output to a WAV. Reads `savedSessions` and the transient capture flag from the
- * hook; all mutations go through the store actions.
+ * SessionBar — the session library + I/O, presented as a header dropdown menu
+ * (◆ Session). Save / load / delete local sessions, export & import the session
+ * JSON, copy a shareable link, and capture the live output to a WAV. Reads
+ * `savedSessions` and the transient capture flag from the hook; all mutations go
+ * through the store actions.
  */
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { IconButton, RecordIcon, ShareIcon, StopIcon } from './ui'
 import { useInstrument } from '../app/useInstrument'
@@ -33,6 +34,22 @@ export function SessionBar() {
   const [busy, setBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const menuRef = useRef<HTMLDetailsElement>(null)
+
+  // Dismiss the dropdown on an outside pointer-down, matching the other header
+  // menus (a native <details> only closes via its own summary otherwise).
+  useEffect(() => {
+    const onDown = (e: PointerEvent): void => {
+      const t = e.target
+      if (t instanceof Node && !menuRef.current?.contains(t)) {
+        menuRef.current?.removeAttribute('open')
+      }
+    }
+    document.addEventListener('pointerdown', onDown)
+    return () => document.removeEventListener('pointerdown', onDown)
+  }, [])
+
+  const closeMenu = (): void => menuRef.current?.removeAttribute('open')
 
   const flash = (text: string, warn = false): void => {
     setToast({ text, warn })
@@ -118,7 +135,11 @@ export function SessionBar() {
   }
 
   return (
-    <div className="pgroup-wrap">
+    <details className="session-menu" ref={menuRef}>
+      <summary className="session-menu__button" aria-label="Open session menu">
+        ◆ Session
+      </summary>
+      <div className="session-menu__sheet pgroup-wrap">
       {/* Save + library */}
       <section className="pgroup">
         <span className="pgroup__title eyebrow">Sessions</span>
@@ -156,8 +177,10 @@ export function SessionBar() {
                   className="pbtn"
                   onClick={() => {
                     void inst.loadSession(s.id).then((r) => {
-                      if (r.ok) flash(`Loaded "${s.name}".`)
-                      else flash(r.error, true)
+                      if (r.ok) {
+                        flash(`Loaded "${s.name}".`)
+                        closeMenu()
+                      } else flash(r.error, true)
                     })
                   }}
                 >
@@ -245,6 +268,7 @@ export function SessionBar() {
           {toast.text}
         </p>
       ) : null}
-    </div>
+      </div>
+    </details>
   )
 }
